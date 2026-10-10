@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.16)
+project(tidecore_host_tests CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CORE ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/tidecore/src)
+get_filename_component(VECTORS ${CMAKE_CURRENT_SOURCE_DIR}/../../../tests/vectors ABSOLUTE)
+add_executable(test_tidecore
+  ${CORE}/payload.cpp ${CORE}/stats.cpp ${CORE}/power_logic.cpp ${CORE}/cycle.cpp test_tidecore.cpp)
+target_include_directories(test_tidecore PRIVATE ${CORE} ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(test_tidecore PRIVATE -Wall -Wextra -Werror -pedantic)
+target_compile_definitions(test_tidecore PRIVATE VECTORS_DIR="${VECTORS}")
+enable_testing()
+add_test(NAME tidecore COMMAND test_tidecore ${VECTORS})
