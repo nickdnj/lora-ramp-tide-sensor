@@ -1,0 +1,1024 @@
+{
+ "format": "tide-sensor payload v1 golden vectors",
+ "spec": "docs/ARCHITECTURE.md section 4.7; CRC-16/CCITT-FALSE over bytes 0-23, little-endian",
+ "length": 26,
+ "data_type": 65364,
+ "rounding_rule": "round half away from zero, then clamp to the field range (never wrap); signed fields clamp to +/-32767",
+ "crc_checks": [
+  {
+   "ascii": "123456789",
+   "crc": 10673
+  },
+  {
+   "ascii": "",
+   "crc": 65535
+  },
+  {
+   "ascii": "A",
+   "crc": 47381
+  }
+ ],
+ "valid": [
+  {
+   "name": "typical",
+   "description": "Typical mid-tide reading, charging",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0000cd3d"
+  },
+  {
+   "name": "all_zero",
+   "description": "Every field zero except ver",
+   "fields": {
+    "ver": 1,
+    "node_id": 0,
+    "seq": 0,
+    "boot_count": 0,
+    "pitch_med": 0,
+    "pitch_sd": 0,
+    "roll_mean": 0,
+    "temp": 0,
+    "vbat": 0,
+    "vpanel": 0,
+    "ipanel": 0,
+    "chg": 0,
+    "awake_ms_prev": 0,
+    "flags": 0
+   },
+   "hex": "01000000000000000000000000000000000000000000000089d8"
+  },
+  {
+   "name": "all_max",
+   "description": "Every unsigned field at max, signed at +max",
+   "fields": {
+    "ver": 1,
+    "node_id": 255,
+    "seq": 65535,
+    "boot_count": 255,
+    "pitch_med": 32767,
+    "pitch_sd": 65535,
+    "roll_mean": 32767,
+    "temp": 32767,
+    "vbat": 65535,
+    "vpanel": 65535,
+    "ipanel": 65535,
+    "chg": 255,
+    "awake_ms_prev": 65535,
+    "flags": 65535
+   },
+   "hex": "01ffffffffff7fffffff7fff7fffffffffffffffffffffff57df"
+  },
+  {
+   "name": "signed_min",
+   "description": "Signed fields at -32768 (wire minimum)",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -32768,
+    "pitch_sd": 21,
+    "roll_mean": -32768,
+    "temp": -32768,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204030080150000800080f60c0014bf0401480f000016df"
+  },
+  {
+   "name": "negative_values",
+   "description": "Negative pitch, roll and temperature",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -8123,
+    "pitch_sd": 21,
+    "roll_mean": -152,
+    "temp": -123,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d2040345e0150068ff85fff60c0014bf0401480f0000ad9f"
+  },
+  {
+   "name": "wide_sd",
+   "description": "pitch_sd above 0.255 deg (the u16 widening)",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 1234,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 4
+   },
+   "hex": "0101d204031fefd20429004b00f60c0014bf0401480f0400798b"
+  },
+  {
+   "name": "seq_wrap_last",
+   "description": "seq 65535 just before wrap",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 65535,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101ffff031fef150029004b00f60c0014bf0401480f0000fbcc"
+  },
+  {
+   "name": "seq_wrap_first",
+   "description": "seq 0 just after wrap",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 0,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "01010000031fef150029004b00f60c0014bf0401480f00004f53"
+  },
+  {
+   "name": "reboot_first_frame",
+   "description": "First frame after a reset: seq 0, reboot+brownout flags",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 0,
+    "boot_count": 4,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 0,
+    "flags": 48
+   },
+   "hex": "01010000041fef150029004b00f60c0014bf040100003000ad19"
+  },
+  {
+   "name": "cold_inhibit",
+   "description": "Cold charge inhibit by firmware rule (CE override)",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": -35,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 0,
+    "chg": 12,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef15002900ddfff60c001400000c480f00000673"
+  },
+  {
+   "name": "health_only",
+   "description": "Critical battery, sensor skipped (health-only payload)",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": 0,
+    "pitch_sd": 0,
+    "roll_mean": 0,
+    "temp": 75,
+    "vbat": 3010,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 1539
+   },
+   "hex": "0101d204030000000000004b00c20b0014bf0401480f0306fd91"
+  },
+  {
+   "name": "flag_bit_0",
+   "description": "flags bit 0 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 1
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0100fc0e"
+  },
+  {
+   "name": "flag_bit_1",
+   "description": "flags bit 1 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 2
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0200af5b"
+  },
+  {
+   "name": "flag_bit_2",
+   "description": "flags bit 2 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 4
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f040009f1"
+  },
+  {
+   "name": "flag_bit_3",
+   "description": "flags bit 3 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 8
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f080064b4"
+  },
+  {
+   "name": "flag_bit_4",
+   "description": "flags bit 4 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 16
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f1000be3e"
+  },
+  {
+   "name": "flag_bit_5",
+   "description": "flags bit 5 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 32
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f20002b3b"
+  },
+  {
+   "name": "flag_bit_6",
+   "description": "flags bit 6 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 64
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f40000130"
+  },
+  {
+   "name": "flag_bit_7",
+   "description": "flags bit 7 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 128
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f80005526"
+  },
+  {
+   "name": "flag_bit_8",
+   "description": "flags bit 8 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 256
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0001ec2d"
+  },
+  {
+   "name": "flag_bit_9",
+   "description": "flags bit 9 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 512
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f00028f1d"
+  },
+  {
+   "name": "flag_bit_10",
+   "description": "flags bit 10 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 1024
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0004497d"
+  },
+  {
+   "name": "flag_bit_11",
+   "description": "flags bit 11 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 2048
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0008c5bc"
+  },
+  {
+   "name": "flag_bit_12",
+   "description": "flags bit 12 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 4096
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0010fc2f"
+  },
+  {
+   "name": "flag_bit_13",
+   "description": "flags bit 13 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 8192
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0020af19"
+  },
+  {
+   "name": "flag_bit_14",
+   "description": "flags bit 14 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 16384
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f00400975"
+  },
+  {
+   "name": "flag_bit_15",
+   "description": "flags bit 15 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 32768
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f008045ac"
+  },
+  {
+   "name": "flags_all",
+   "description": "Every flag bit set",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 65535
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480fffffc220"
+  },
+  {
+   "name": "chg_bit_0",
+   "description": "chg bit 0 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 1,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0000cd3d"
+  },
+  {
+   "name": "chg_bit_1",
+   "description": "chg bit 1 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 2,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0402480f00001fd3"
+  },
+  {
+   "name": "chg_bit_2",
+   "description": "chg bit 2 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 4,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0404480f00009a1e"
+  },
+  {
+   "name": "chg_bit_3",
+   "description": "chg bit 3 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 8,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0408480f0000b195"
+  },
+  {
+   "name": "chg_bit_4",
+   "description": "chg bit 4 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 16,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0410480f0000c693"
+  },
+  {
+   "name": "chg_bit_5",
+   "description": "chg bit 5 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 32,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0420480f0000289f"
+  },
+  {
+   "name": "chg_bit_6",
+   "description": "chg bit 6 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 64,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0440480f0000f486"
+  },
+  {
+   "name": "chg_bit_7",
+   "description": "chg bit 7 set alone",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 128,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf0480480f00004cb5"
+  },
+  {
+   "name": "chg_all",
+   "description": "Every chg bit set",
+   "fields": {
+    "ver": 1,
+    "node_id": 1,
+    "seq": 1234,
+    "boot_count": 3,
+    "pitch_med": -4321,
+    "pitch_sd": 21,
+    "roll_mean": 41,
+    "temp": 75,
+    "vbat": 3318,
+    "vpanel": 5120,
+    "ipanel": 1215,
+    "chg": 255,
+    "awake_ms_prev": 3912,
+    "flags": 0
+   },
+   "hex": "0101d204031fef150029004b00f60c0014bf04ff480f000033cd"
+  }
+ ],
+ "invalid": [
+  {
+   "name": "bad_crc_bitflip",
+   "hex": "0101d204031eef150029004b00f60c0014bf0401480f0000cd3d",
+   "expect": "bad_crc"
+  },
+  {
+   "name": "bad_crc_field",
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0000323d",
+   "expect": "bad_crc"
+  },
+  {
+   "name": "wrong_version",
+   "hex": "0201d204031fef150029004b00f60c0014bf0401480f0000c864",
+   "expect": "bad_version"
+  },
+  {
+   "name": "length_25",
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0000cd",
+   "expect": "bad_length"
+  },
+  {
+   "name": "length_27",
+   "hex": "0101d204031fef150029004b00f60c0014bf0401480f0000cd3d00",
+   "expect": "bad_length"
+  },
+  {
+   "name": "length_0",
+   "hex": "",
+   "expect": "bad_length"
+  }
+ ],
+ "quantize": [
+  {
+   "kind": "pitch",
+   "in": 0.0,
+   "out": 0
+  },
+  {
+   "kind": "pitch",
+   "in": 1.2344,
+   "out": 1234
+  },
+  {
+   "kind": "pitch",
+   "in": 1.2345,
+   "out": 1235
+  },
+  {
+   "kind": "pitch",
+   "in": -1.2345,
+   "out": -1235
+  },
+  {
+   "kind": "pitch",
+   "in": -0.0004,
+   "out": 0
+  },
+  {
+   "kind": "pitch",
+   "in": -0.0005,
+   "out": -1
+  },
+  {
+   "kind": "pitch",
+   "in": 0.0005,
+   "out": 1
+  },
+  {
+   "kind": "pitch",
+   "in": 32.767,
+   "out": 32767
+  },
+  {
+   "kind": "pitch",
+   "in": 32.7675,
+   "out": 32767
+  },
+  {
+   "kind": "pitch",
+   "in": 40.0,
+   "out": 32767
+  },
+  {
+   "kind": "pitch",
+   "in": -40.0,
+   "out": -32767
+  },
+  {
+   "kind": "pitch",
+   "in": -32.768,
+   "out": -32767
+  },
+  {
+   "kind": "pitch_sd",
+   "in": 0.0,
+   "out": 0
+  },
+  {
+   "kind": "pitch_sd",
+   "in": 0.2555,
+   "out": 256
+  },
+  {
+   "kind": "pitch_sd",
+   "in": 0.256,
+   "out": 256
+  },
+  {
+   "kind": "pitch_sd",
+   "in": 65.535,
+   "out": 65535
+  },
+  {
+   "kind": "pitch_sd",
+   "in": 70.0,
+   "out": 65535
+  },
+  {
+   "kind": "pitch_sd",
+   "in": -0.001,
+   "out": 0
+  },
+  {
+   "kind": "roll",
+   "in": 0.0,
+   "out": 0
+  },
+  {
+   "kind": "roll",
+   "in": 0.415,
+   "out": 42
+  },
+  {
+   "kind": "roll",
+   "in": -0.415,
+   "out": -42
+  },
+  {
+   "kind": "roll",
+   "in": 0.004,
+   "out": 0
+  },
+  {
+   "kind": "roll",
+   "in": -0.005,
+   "out": -1
+  },
+  {
+   "kind": "roll",
+   "in": 400.0,
+   "out": 32767
+  },
+  {
+   "kind": "temp",
+   "in": 25.0,
+   "out": 250
+  },
+  {
+   "kind": "temp",
+   "in": -40.0,
+   "out": -400
+  },
+  {
+   "kind": "temp",
+   "in": 85.0,
+   "out": 850
+  },
+  {
+   "kind": "temp",
+   "in": 7.45,
+   "out": 75
+  },
+  {
+   "kind": "temp",
+   "in": -7.45,
+   "out": -75
+  },
+  {
+   "kind": "temp",
+   "in": 0.04,
+   "out": 0
+  },
+  {
+   "kind": "temp",
+   "in": -0.05,
+   "out": -1
+  },
+  {
+   "kind": "temp",
+   "in": 4000.0,
+   "out": 32767
+  },
+  {
+   "kind": "ipanel",
+   "in": 0.0,
+   "out": 0
+  },
+  {
+   "kind": "ipanel",
+   "in": 121.5,
+   "out": 1215
+  },
+  {
+   "kind": "ipanel",
+   "in": 0.04,
+   "out": 0
+  },
+  {
+   "kind": "ipanel",
+   "in": 0.05,
+   "out": 1
+  },
+  {
+   "kind": "ipanel",
+   "in": 7000.0,
+   "out": 65535
+  },
+  {
+   "kind": "ipanel",
+   "in": -1.0,
+   "out": 0
+  }
+ ]
+}

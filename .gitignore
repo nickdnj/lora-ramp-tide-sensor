@@ -13,3 +13,12 @@ build/
 .claude/settings.local.json
 # Agent worktrees (only used if an agent runs with worktree isolation)
 .claude/worktrees/
+# Python virtualenv and tooling caches
+.venv/
+.pytest_cache/
+*.egg-info/
+# Simulator scratch output (plots, databases)
+sim-out/
+# Firmware host-test build output
+firmware/.pio/
+firmware/test/host/build/
