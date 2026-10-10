@@ -1,0 +1,29 @@
+{
+  "provisionedFrom": "/Users/nickd/Workspaces/AgentArchitect",
+  "kind": "project",
+  "team": "software-project",
+  "teams": [
+    "software-project"
+  ],
+  "projectType": "software",
+  "projectName": "LoRa Ramp Tide Sensor",
+  "agents": [
+    "dev-planning",
+    "legal",
+    "marketing",
+    "product-requirements",
+    "qa-strategy",
+    "sales",
+    "software-architecture",
+    "software-developer",
+    "ux-design",
+    "wiki-ingest"
+  ],
+  "skills": [
+    "software-project"
+  ],
+  "mcp": [],
+  "provisionedAt": "2026-10-10",
+  "aaCommit": "9db8f6a389afc3c1030b9923e443aaed82319280",
+  "syncedAt": "2026-10-10"
+}
