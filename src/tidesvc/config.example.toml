@@ -1,0 +1,61 @@
+# tidesvc configuration (non-secret). Secrets come from .env, never this file:
+#   TIDE_CHANNEL_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM,
+#   ALERT_EMAIL_TO, TEMPEST_TOKEN
+
+[radio]
+transport = "serial"            # serial | tcp
+port = "/dev/meshcore-gw"
+channel_idx = 1
+data_type = 0xFF54
+
+[repeater]
+name = ""
+pubkey_prefix = ""              # identifies Nick's repeater in adverts
+silent_after_s = 14400
+status_poll_s = 0
+
+[node]
+interval_s = 300
+stale_after_s = 900
+silent_alert_after_s = 1800
+
+[calibration]
+window_min = 30
+envelope_margin_deg = 0.5
+refit_h0_m = 0.05
+refit_l_eff_rel = 0.03
+
+[noaa]
+prediction_station = "8531942"
+ocean_reference = "8531991"
+observed_reference = "8531680"
+
+[energy]
+capacity_mah = 3000
+i_sleep_ua = 50                 # replace with bench value (B2)
+awake_mas_per_cycle = 125       # replace with bench value (B3)
+negative_streak_days = 7
+
+[alerts]
+surge_warning_m = 0.30
+surge_severe_m = 0.60
+excess_rise_m_per_h = 0.15
+surge_watch_m = 0.15
+
+[tempest]
+enabled = false                 # optional input
+station_id = 183092
+poll_s = 300
+stale_after_s = 900
+onshore_sector_deg = [20, 140]
+onshore_min_mps = 8.0
+pressure_drop_3h_hpa = 3.0
+
+[api]
+host = "0.0.0.0"
+port = 8120
+
+[storage]
+db_path = "/data/tide.db"
+export_dir = "/data/exports"
+backup_dir = "/data/backups"
