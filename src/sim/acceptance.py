@@ -91,7 +91,8 @@ def checks(m: dict, scenario) -> list[Check]:
     out.append(Check("DEDUP-1", "Duplicate (direct + relayed) copies de-duplicated", "one reading per "
                      "(node, boot, seq); readings == intact unique frames",
                      f"{ln['duplicate_copies_by_radio']} duplicate copies sent, "
-                     f"{ln['packets_raw_by_status'].get('duplicate', 0)} marked duplicate, "
+                     f"{ln['packets_raw_by_status'].get('duplicate', 0)} marked duplicate (the rest arrived "
+                     f"corrupted: bad_crc), "
                      f"{ln['duplicate_reading_keys']} duplicate keys, readings == intact keys: "
                      f"{ln['readings_match_intact_keys']}",
                      ln["duplicate_reading_keys"] == 0 and ln["readings_match_intact_keys"]))

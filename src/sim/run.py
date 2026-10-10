@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-plots", action="store_true")
     ap.add_argument("--sweep", type=int, default=0,
                     help="also run the default scenario with seeds 2..N and add a robustness table")
+    ap.add_argument("--tie-sensitivity", type=float, default=0,
+                    help="also run seeds 1..N with the datum tie after this many days (accuracy only)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     names = args.scenario or ["default", "deficit"]
@@ -66,7 +68,16 @@ def main(argv: list[str] | None = None) -> int:
         if fails:
             ok_all = False
         print(f"  required failures: {fails or 'none'}")
-        sweep.append((seed, m, cs))
+        sweep.append((f"{seed}", m, cs))
+    if args.tie_sensitivity:
+        for seed in range(1, max(2, args.sweep) + 1):
+            sc = SCENARIOS["default"]()
+            sc.seed = seed
+            sc.datum_tie_after_days = args.tie_sensitivity
+            print(f"sensitivity: datum tie after {sc.datum_tie_after_days:g} days, seed {seed} ...", flush=True)
+            r = run(sc, workdir=args.workdir)
+            m = all_metrics(r)
+            sweep.append((f"{seed} (tie {sc.datum_tie_after_days:g} d)", m, None))
     write_report(results, Path(args.report), plot_files, sweep)
     print(f"report written to {args.report}")
     return 0 if ok_all else 1

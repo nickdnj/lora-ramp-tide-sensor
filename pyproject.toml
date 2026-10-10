@@ -20,7 +20,7 @@ radio = ["meshcore==2.3.15"]
 # The simulator uses numpy; matplotlib is optional (plots only).
 sim = ["numpy>=1.26"]
 plots = ["matplotlib>=3.8"]
-dev = ["pytest>=8", "numpy>=1.26"]
+dev = ["pytest>=8", "respx>=0.21", "numpy>=1.26"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -35,3 +35,6 @@ testpaths = ["tests"]
 markers = [
     "slow: long-running simulation tests (still offline)",
 ]
+
+[tool.ruff]
+line-length = 120

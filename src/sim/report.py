@@ -107,22 +107,29 @@ def sweep_table(sweep) -> list[str]:
              _row("Seed", "Served RMS cm", "Window-centre RMS cm", "Bias cm", "Hi/lo RMS / max min", "Warning latency min",
                   "Severe latency min", "Energy verdict (truth)", "Refit dh0 cm / dL %", "Required checks"),
              _row(*["---"] * 10)]
+    def lat(d):
+        return "n/a" if d.get("latency_min") is None else f"{d['latency_min']:.0f}"
+
     for seed, m, cs in sweep:
         a = m["accuracy"]
         h = m["hilo"]
         s = m["surge"]
         e = m["energy"]
         rf = m["calibration"]["refit_runs"][-1] if m["calibration"]["refit_runs"] else {}
-        fails = [c.id for c in cs if not c.passed and not c.stretch]
+        if cs is None:
+            verdict_cell = "accuracy sensitivity only (surge precedes the tie)"
+        else:
+            fails = [c.id for c in cs if not c.passed and not c.stretch]
+            verdict_cell = "all pass" if not fails else "FAIL: " + ", ".join(fails)
         lines.append(_row(seed, f"{a['live_trailing_vs_truth_now']['rms_cm']:.2f}",
                           f"{a['live_trailing_vs_truth_window_centre']['rms_cm']:.2f}",
                           f"{a['live_trailing_vs_truth_now']['bias_cm']:+.2f}",
                           f"{h['dt_min_rms']:.1f} / {h['dt_min_max_abs']:.1f}",
-                          f"{s['SURGE_WARNING']['latency_min']:.0f}", f"{s['SURGE_SEVERE']['latency_min']:.0f}",
+                          lat(s.get("SURGE_WARNING", {})), lat(s.get("SURGE_SEVERE", {})),
                           f"{e['verdict']['assessment']} ({e['true_assessment']})",
-                          f"{100 * rf.get('dh0_m', 0):+.2f} / {100 * rf.get('dl_rel', 0):+.2f}",
-                          "all pass" if not fails else "FAIL: " + ", ".join(fails)))
-    return lines + [""]
+                          f"{100 * rf.get('dh0_m', 0):+.2f} / {100 * rf.get('dl_rel', 0):+.2f}", verdict_cell))
+    return lines + ["", "Rows marked 'tie 14 d' follow ARCHITECTURE 6.5 literally (datum tie at the end of a 14-day "
+                    "shakedown); accuracy is then measured over the remaining ~15 days only.", ""]
 
 
 def write_report(results: list[tuple], path: Path, plot_files: list[str], sweep=None) -> bool:
@@ -244,7 +251,7 @@ def write_report(results: list[tuple], path: Path, plot_files: list[str], sweep=
                       json.dumps(lc["body"], indent=1)[:2500], "```", ""]
     if sweep:
         first = results[0][1]
-        sweep = [(results[0][0].scenario.seed, first, checks(first, results[0][0].scenario))] + list(sweep)
+        sweep = [(f"{results[0][0].scenario.seed}", first, checks(first, results[0][0].scenario))] + list(sweep)
         lines += sweep_table(sweep)
     if plot_files:
         lines += ["## Plots", "", "PNG plots were written outside the repo (not committed): " +
@@ -267,8 +274,12 @@ FINDINGS = [
     "from SYS). While charging, the BQ25185 sits in VINDPM and the sample is the panel current, which is correct; when "
     "charging is off (DONE, cold inhibit, CE override, latch), the sample is the node's awake current. The literal "
     "ARCHITECTURE 6.6 integral reported about 17x the true accepted harvest for the 1 W December run, and turned the "
-    "shaded/cold deficit run into `marginal`. `tidesvc.energy.harvest_current_ma` counts ipanel only while CHRG is "
-    "set and the modelled average load otherwise.",
+    "shaded/cold deficit run into `marginal`. The same happens while charging in the CV taper near full, when the "
+    "panel is no longer the limit (seeds 2-5 overstated harvest by 17-32% until fixed). "
+    "`tidesvc.energy.harvest_current_ma` now counts ipanel as is only when the panel is pulled down to VINDPM "
+    "(vpanel < vbat + 1.0 V), subtracts the awake read current otherwise, and counts only the modelled average load "
+    "when not charging. Panel presence is judged by voltage, not by a near-zero current. Bench B10 must confirm the "
+    "VINDPM signature.",
     "3. **False DONE every night.** Without panel input the BQ25185 STAT pins float high (1/1), which ARCHITECTURE "
     "4.7's DONE rule ('STAT 1/1 while /CE is LOW') reads as DONE. The firmware rule now also requires panel voltage "
     "(vpanel >= 3.0 V); the server ignores DONE without panel voltage.",
@@ -281,16 +292,22 @@ FINDINGS = [
     "6. **One-sided extreme fits.** An extreme next to an outage could be fitted from data on one side only (an "
     "18-minute timing error in an early run). `find_extreme_near` now requires data on both sides of the vertex, "
     "which also protects the monthly refit.",
-    "7. **World-model fix (simulator only).** The first weather-noise model was an unsmoothed random walk, which "
+    "7. **Cold-inhibit hours counted the night.** The firmware cold bit is set whenever the box is below +1 C, so "
+    "'time with cold_charge_inhibit set' (ARCHITECTURE 6.6) counted every cold night and blurred 'no sun' with 'too "
+    "cold to charge' (PRD FR6). `charge_inhibit_cold_h` now counts cold-bit time with panel input present.",
+    "8. **World-model fix (simulator only).** The first weather-noise model was an unsmoothed random walk, which "
     "made even the true high/low times jitter by tens of minutes; it is now smoothed (1.5 h).", "",
     "Limits that remain (reported, not hidden):", "",
     "- The served `level_m` is a trailing median, so against the true water at the same instant it carries the "
     "~12.5 min lag: see ACC-1/ACC-2. It meets +/-5 cm; it does not meet the +/-2 cm stretch at mid-tide rates. "
     "Against the time it represents (window centre), and as history, it is within 2 cm.",
     "- The datum comes from NOAA predicted extremes (ADR-009). It absorbs the mean weather residual of the tie "
-    "window: in the default run that is about -1.5 cm of bias, which dominates the error budget. The sim compresses "
-    "the 14-day shakedown to a few days so that the surge and faults happen after the tie; a 14-day tie averages "
-    "the weather down further.",
+    "window: -1.6 cm of bias in the default run (-2.6 to +0.2 cm across seeds), which dominates the error budget. "
+    "The sim compresses the 14-day shakedown to 4 days so that the surge and faults happen after the tie; the "
+    "'tie 14 d' rows show a 14-day tie gives a similar bias (-1.7 to -0.3 cm), because the level error is the "
+    "difference between the mean weather residual over the tie window and over the evaluation window, each of "
+    "order 0.5-1 cm for a 2.5 cm residual correlated over ~10 h. The Sandy Hook residual could be used to "
+    "correct the tie; that is not in the architecture and was not done.",
     "- `k_T` stays 0 (no bench B7 yet); the simulated sensor drifts 0.0035 deg/C, about 0.5 mm per C of level.",
     "- The simulated physics (charger, panel, cell, wakes) is a model with stated assumptions, not a substitute for "
     "the bench tests B1-B13 and the RF tests; nothing here verifies MeshCore, the companion protocol or meshcore_py.",
