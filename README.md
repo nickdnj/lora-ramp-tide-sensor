@@ -8,6 +8,10 @@
 
 *Concept render, not a photo of a finished unit.*
 
+![Concept render of the installed node: only a small solar panel is visible on the sunlit south face of an aluminum dock ramp](docs/img/installed-concept.png)
+
+*Installed (concept): only the small solar panel shows on the ramp's south-facing side face. The rest is out of sight under the ramp. AI-generated illustration, not a photo of the actual install.*
+
 ## The idea
 
 Many marinas have a ramp (gangway) hinged at the bulkhead with its free end riding on a floating dock. As the tide moves, the ramp tilts. Over a roughly 1 m tidal range on a 25 ft ramp, that is about 6 to 7.5 degrees of swing, so 1 cm of water level is about 0.075 degrees.
