@@ -20,6 +20,10 @@ turn a cold-inhibited deficit week into a "surplus". So, per sample:
 The VINDPM test (vpanel vs vbat) relies on BQ25185 behaviour to confirm on the
 bench (TEST-PLAN B10).
 
+charge_inhibit_cold_h counts time with the cold bit set *and* panel input present
+(ARCHITECTURE 6.6 says "time with cold_charge_inhibit set", which would also
+count every cold night and blur "no sun" with "too cold to charge").
+
 Consumption is the bench model: cycles x awake_ms x I_awake + sleep x I_sleep,
 with the constants recorded per day. Gaps > 15 min are not integrated and
 ``coverage_pct`` is reported.
@@ -130,7 +134,9 @@ def rollup_day(conn: sqlite3.Connection, cfg, day: _dt.date) -> DayRollup:
         vb = (b["vbat_mv"] or 0) / 1000.0
         mwh += (ha * va + hb * vb) / 2.0 * frac
         covered += hi - lo
-        if (a["chg_bits"] or 0) & codec.CHG_COLD_INHIBIT:
+        # cold-inhibited hours count only with panel input present: "too cold to charge",
+        # not "night" (the firmware cold bit is set whenever the box is below +1 C)
+        if (a["chg_bits"] or 0) & codec.CHG_COLD_INHIBIT and (a["vpanel_mv"] or 0) >= VIN_PRESENT_MV:
             cold_s += hi - lo
         if (a["chg_bits"] or 0) & codec.CHG_CHRG:
             chg_s += hi - lo

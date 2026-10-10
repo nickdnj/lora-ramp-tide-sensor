@@ -170,3 +170,10 @@ def test_charging_but_not_panel_limited_removes_awake_load(conn, cfg):
     fill_day(conn, DAY, lambda s: {"ipanel": 30.0, "vpanel": 3700, "vbat": 3350, "chg": codec.CHG_CHRG}
              if 10 * 3600 <= s < 14 * 3600 else {})
     assert energy.rollup_day(conn, cfg, DAY).harvest_mah == pytest.approx(120.0, rel=0.03)
+
+
+def test_cold_hours_only_with_panel_input(conn, cfg):
+    cold = codec.CHG_COLD_INHIBIT | codec.CHG_CE_OVERRIDE
+    fill_day(conn, DAY, lambda s: {"chg": cold, "vpanel": 6500, "ipanel": 0.5} if 8 * 3600 <= s < 16 * 3600
+             else {"chg": cold, "vpanel": 0})
+    assert energy.rollup_day(conn, cfg, DAY).charge_inhibit_cold_h == pytest.approx(8.0, abs=0.1)

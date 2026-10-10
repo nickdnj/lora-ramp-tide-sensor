@@ -201,7 +201,7 @@ class PowerSystem:
         d["charge_mah"] += charge * dt / 3600
         d["consumption_mah"] += load_ma * dt / 3600
         d["psh"] += w.poa(t) * dt / 3600 / 1000
-        if avail > 0.5 and (self.ce_disabled or self.hw_cold) and not self.done:
+        if avail > 0.5 and (self.ce_disabled or self.hw_cold):
             d["cold_inhibit_h"] += dt / 3600
         d["reached_full"] = d["reached_full"] or self.done
         d["min_soc_pct"] = min(d["min_soc_pct"], 100 * self.soc_mah / self.capacity_mah)
