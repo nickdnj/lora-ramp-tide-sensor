@@ -15,7 +15,9 @@ Rules (ARCHITECTURE 4.3, 4.6, 4.7; thresholds are placeholders until bench B8):
   resets on any non-charging STAT and while the cold rule holds /CE HIGH. A
   latched charger (STAT 0/0) also gets a recovery pulse unless cold-held.
 - DONE is reported only when STAT is 1/1 while /CE was LOW (enabled) at the
-  time STAT was read (i.e. the previous cycle's CE state).
+  time STAT was read (i.e. the previous cycle's CE state) AND panel input is
+  present (vpanel >= 3.0 V). Without input the open-drain STAT pins float high
+  (1/1), so the ARCHITECTURE 4.7 rule alone reports a false DONE every night.
 - A hardware cold fault is inferred from STAT 0/1 with temperature < +5.0 C.
 - Burst statistics: median (even count: mean of the two middle values),
   population SD, mean roll. high_sd above 0.25 deg; out_of_range when
@@ -40,6 +42,7 @@ INTERVAL_S = {NORMAL: 300, LOW: 900, CRITICAL: 3600}
 COLD_DISABLE_BELOW_C = 1.0
 COLD_ENABLE_ABOVE_C = 2.0
 HW_COLD_FAULT_BELOW_C = 5.0
+VIN_PRESENT_MV = 3000
 CE_PULSE_AFTER_S = 4 * 3600
 
 HIGH_SD_DEG = 0.25
@@ -91,7 +94,7 @@ class ChargerOut:
 
 
 def charger_step(prev: ChargerState, temp_c: float | None, stat1: int, stat2: int,
-                 dt_s: int) -> ChargerOut:
+                 dt_s: int, vin_present: bool = True) -> ChargerOut:
     if temp_c is None or temp_c < COLD_DISABLE_BELOW_C:
         cold = True
     elif temp_c > COLD_ENABLE_ABOVE_C:
@@ -116,7 +119,7 @@ def charger_step(prev: ChargerState, temp_c: float | None, stat1: int, stat2: in
     chg = 0
     if charging:
         chg |= CHG_CHRG
-    if stat1 == 1 and stat2 == 1 and not prev.ce_disabled:
+    if stat1 == 1 and stat2 == 1 and not prev.ce_disabled and vin_present:
         chg |= CHG_DONE
     hw_cold = stat1 == 0 and stat2 == 1 and temp_c is not None and temp_c < HW_COLD_FAULT_BELOW_C
     if cold or hw_cold:
@@ -182,9 +185,11 @@ def generate_logic_vectors() -> dict:
 
     def run(seq, start=ChargerState()):
         out, s = [], start
-        for temp, s1, s2, dt in seq:
-            r = charger_step(s, temp, s1, s2, dt)
-            out.append({"temp_c": temp, "stat1": s1, "stat2": s2, "dt_s": dt,
+        for item in seq:
+            temp, s1, s2, dt = item[:4]
+            vin = item[4] if len(item) > 4 else True
+            r = charger_step(s, temp, s1, s2, dt, vin)
+            out.append({"temp_c": temp, "stat1": s1, "stat2": s2, "dt_s": dt, "vin_present": vin,
                         "ce_disabled": r.ce_disabled, "pulse": r.pulse, "chg": r.chg,
                         "charging_elapsed_s": r.state.charging_elapsed_s})
             s = r.state
@@ -201,6 +206,8 @@ def generate_logic_vectors() -> dict:
     # charging interrupted (STAT 1/1 done) resets the counter; latch gets a recovery pulse
     misc = [(20.0, 1, 0, 300)] * 10 + [(20.0, 1, 1, 300)] + [(20.0, 1, 0, 300)] * 5 + \
            [(20.0, 0, 0, 300)] + [(3.0, 0, 1, 300), (12.0, 0, 1, 300)]
+    # night: no panel input, STAT floats 1/1 -> no DONE; daytime 1/1 with input -> DONE
+    night = [(10.0, 1, 1, 300, False), (10.0, 1, 1, 300, False), (10.0, 1, 1, 300, True)]
     start_enabled = ChargerState(ce_disabled=False, charging_elapsed_s=0)
     charger = {
         "cold_falling": run(falling, start_enabled),
@@ -209,6 +216,7 @@ def generate_logic_vectors() -> dict:
         "safety_pulse": run(pulse_seq, start_enabled),
         "cold_interrupts_pulse": run(cold_mid, start_enabled),
         "misc_done_latch_hwcold": run(misc, start_enabled),
+        "night_no_input": run(night, start_enabled),
     }
     charger_starts = {
         "cold_falling": {"ce_disabled": False, "charging_elapsed_s": 0},
@@ -217,6 +225,7 @@ def generate_logic_vectors() -> dict:
         "safety_pulse": {"ce_disabled": False, "charging_elapsed_s": 0},
         "cold_interrupts_pulse": {"ce_disabled": False, "charging_elapsed_s": 0},
         "misc_done_latch_hwcold": {"ce_disabled": False, "charging_elapsed_s": 0},
+        "night_no_input": {"ce_disabled": False, "charging_elapsed_s": 0},
     }
 
     flag_cases = []

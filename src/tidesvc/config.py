@@ -81,6 +81,10 @@ class EnergyCfg:
     min_verdict_days: int = 7
     # panel considered present when vpanel exceeds vbat by this much (mV)
     panel_present_margin_mv: int = 300
+    # charging but not panel-limited when vpanel exceeds vbat by this much (VINDPM is vbat + ~330 mV)
+    vindpm_margin_mv: int = 1000
+    # node current while the INA3221 is read (ARCHITECTURE 4.4 power-read phase); bench value replaces it
+    i_read_ma: float = 25.0
 
     @property
     def i_awake_ma(self) -> float:

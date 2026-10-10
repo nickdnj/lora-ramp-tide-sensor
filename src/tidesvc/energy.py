@@ -10,13 +10,25 @@ measures the node's *awake* current, not its average (~0.5 mA). Integrating it
 would credit ~25 mA x daylight hours of harvest that never existed, which can
 turn a cold-inhibited deficit week into a "surplus". So, per sample:
 
-- CHRG bit set           -> harvest current = ipanel
+- CHRG set, panel pulled down (VINDPM, vpanel < vbat + 1.0 V): panel-limited,
+  harvest current = ipanel
+- CHRG set, panel not pulled down (charger-limited, e.g. CV taper near full):
+  ipanel = awake load at the INA read + charge, so
+  harvest current = ipanel - i_read_ma + modelled average load
 - panel present, no CHRG -> harvest current = min(ipanel, modelled average load)
 - otherwise              -> 0
+The VINDPM test (vpanel vs vbat) relies on BQ25185 behaviour to confirm on the
+bench (TEST-PLAN B10).
 
 Consumption is the bench model: cycles x awake_ms x I_awake + sleep x I_sleep,
 with the constants recorded per day. Gaps > 15 min are not integrated and
 ``coverage_pct`` is reported.
+
+Verdict (deviation from the letter of ARCHITECTURE 6.6, following its stated
+intent): accepted harvest is capped once the cell is full, so harvest /
+consumption tends to ~1.0 for any node that keeps reaching full, however big the
+panel. A cell that reached full on at least half of the qualifying days is
+therefore "surplus"; otherwise the 2.0 / 1.0 ratio thresholds apply.
 """
 
 from __future__ import annotations
@@ -27,6 +39,16 @@ from dataclasses import dataclass
 
 from . import codec
 from .timeutil import LOCAL_TZ, local_date, local_day_bounds
+
+
+VIN_PRESENT_MV = 3000
+
+
+def is_done(r) -> bool:
+    """DONE bit with panel input present. Without input the BQ25185 STAT pins float
+    high (1/1); firmware built to the letter of ARCHITECTURE 4.7 would then report
+    DONE every night, so the server ignores DONE without panel voltage."""
+    return bool((r["chg_bits"] or 0) & codec.CHG_DONE) and (r["vpanel_mv"] or 0) >= VIN_PRESENT_MV
 
 
 def _interval_for_flags(flags: int) -> int:
@@ -49,10 +71,14 @@ def harvest_current_ma(cfg, r) -> float | None:
     if ip is None:
         return None
     chg = r["chg_bits"] or 0
-    if chg & codec.CHG_CHRG:
-        return float(ip)
     vp, vb = r["vpanel_mv"], r["vbat_mv"]
-    panel_present = ip > 0.05 or (vp is not None and vb is not None and vp > vb + cfg.energy.panel_present_margin_mv)
+    e = cfg.energy
+    if chg & codec.CHG_CHRG:
+        if vp is not None and vb is not None and vp > vb + e.vindpm_margin_mv:
+            return max(0.0, float(ip) - e.i_read_ma) + avg_load_ma(cfg, _interval_for_flags(r["flags"] or 0))
+        return float(ip)
+    # panel input judged by voltage: an INA3221 current offset (~1 mA on a 0.1 ohm shunt) must not count at night
+    panel_present = (vp >= VIN_PRESENT_MV) if vp is not None else ip > 1.0
     if not panel_present:
         return 0.0
     return min(float(ip), avg_load_ma(cfg, _interval_for_flags(r["flags"] or 0)))
@@ -131,7 +157,7 @@ def rollup_day(conn: sqlite3.Connection, cfg, day: _dt.date) -> DayRollup:
     return DayRollup(
         date=day.isoformat(), harvest_mah=harvest, harvest_mwh=mwh, consumption_est_mah=cons,
         net_mah=harvest - cons, coverage_pct=100.0 * covered / day_s,
-        reached_full=any((r["chg_bits"] or 0) & codec.CHG_DONE for r in in_day),
+        reached_full=any(is_done(r) for r in in_day),
         charge_inhibit_cold_h=cold_s / 3600.0, charging_h=chg_s / 3600.0,
         vbat_rest_v=min(rest) if rest else None, vbat_min_v=min(vb) if vb else None,
         vbat_max_v=max(vb) if vb else None, vbat_end_v=vb[-1] if vb else None,
@@ -173,8 +199,8 @@ def daily_rows(conn: sqlite3.Connection, first: _dt.date, last: _dt.date) -> lis
 def soc_estimate(conn: sqlite3.Connection, cfg, now: float) -> dict:
     """Coulomb count from the last DONE anchor (100%), clamped to [0, capacity]."""
     e = cfg.energy
-    anc = conn.execute("SELECT t FROM readings WHERE (chg_bits & ?) != 0 AND t <= ? ORDER BY t DESC LIMIT 1",
-                       (codec.CHG_DONE, now)).fetchone()
+    anc = conn.execute("SELECT t FROM readings WHERE (chg_bits & ?) != 0 AND vpanel_mv >= ? AND t <= ? "
+                       "ORDER BY t DESC LIMIT 1", (codec.CHG_DONE, VIN_PRESENT_MV, now)).fetchone()
     if anc is None:
         return {"soc_est_pct": None, "soc_mah": None, "soc_anchor": None, "reason": "no_done_anchor_yet"}
     t_anchor = anc[0]
@@ -188,7 +214,7 @@ def soc_estimate(conn: sqlite3.Connection, cfg, now: float) -> dict:
             continue
         ha = harvest_current_ma(cfg, a) if (b["t"] - a["t"]) <= e.max_gap_s else 0.0
         soc = min(e.capacity_mah, max(0.0, soc + ((ha or 0.0) - load) * dt_h))
-        if (b["chg_bits"] or 0) & codec.CHG_DONE:
+        if is_done(b):
             soc = e.capacity_mah
     if rows:
         soc = max(0.0, soc - load * max(0.0, now - rows[-1]["t"]) / 3600.0)
@@ -236,9 +262,22 @@ def verdict(conn: sqlite3.Connection, cfg, now: float) -> dict:
         h = sum(r["harvest_mah"] for r in q)
         c = sum(r["consumption_est_mah"] for r in q)
         ratio = h / c if c > 0 else None
+        full = [r for r in q if r["reached_full"]]
         out["energy_ratio"] = round(ratio, 3) if ratio is not None else None
+        out["qualifying_days_reached_full"] = len(full)
+        out["energy_ratio_is_lower_bound"] = bool(full)
         if ratio is not None:
-            out["assessment"] = "surplus" if ratio >= 2.0 else "marginal" if ratio >= 1.0 else "deficit"
+            out["assessment"] = assessment_for_ratio(ratio)
+            out["assessment_basis"] = "energy_ratio"
+        # Accepted harvest is capped once the cell is full (the charger stops taking
+        # current), so by conservation the ratio tends to ~1.0 for any node whose
+        # cell keeps reaching full, however large the panel. ARCHITECTURE 6.6 says
+        # reaching full is itself the "panel is large enough" signal; this applies it:
+        # full on at least half the qualifying days -> surplus.
+        if len(full) * 2 >= len(q) and out["assessment"] != "surplus":
+            out["assessment"] = "surplus"
+            out["assessment_basis"] = (f"cell reached full on {len(full)} of {len(q)} qualifying days "
+                                       f"(accepted harvest is capped by a full cell)")
     last7 = [r for r in q if r["date"] >= (last - _dt.timedelta(days=6)).isoformat()]
     if last7:
         net7 = sum(r["net_mah"] for r in last7) / len(last7)

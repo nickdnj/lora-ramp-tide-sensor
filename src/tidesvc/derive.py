@@ -322,6 +322,10 @@ def find_extreme_near(series_t: Sequence[float], series_v: Sequence[float], anch
     xv = -b / (2 * a)
     if abs(xv) * 3600 > fit_half_s:
         return None
+    # data must bracket the vertex (no one-sided fits across an outage)
+    side = max(3, min_points // 3)
+    if sum(1 for x in xs if x < xv) < side or sum(1 for x in xs if x > xv) < side:
+        return None
     return ObservedExtreme(t=tc + xv * 3600, v=c0 + b * xv + a * xv * xv, type=typ, anchor_t=anchor_t,
                            n_points=len(fit))
 

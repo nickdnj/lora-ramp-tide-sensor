@@ -116,7 +116,7 @@ def test_negative_streak_six_vs_seven_and_low_coverage_skip(conn, cfg):
 
 def test_soc_anchor_and_clamp(conn, cfg):
     start, _ = local_day_bounds(DAY)
-    add(conn, start, chg=codec.CHG_DONE)
+    add(conn, start, chg=codec.CHG_DONE, vpanel=6500)
     for k in range(1, 289):
         add(conn, start + 300 * k)
     s = energy.soc_estimate(conn, cfg, start + 86400)
@@ -125,7 +125,7 @@ def test_soc_anchor_and_clamp(conn, cfg):
     assert s["soc_mah"] == pytest.approx(cfg.energy.capacity_mah - 24 * load, abs=0.5)
     # big harvest cannot exceed capacity
     conn.execute("UPDATE readings SET ipanel_ma=200, chg_bits=1")
-    conn.execute("UPDATE readings SET chg_bits=2 WHERE t=?", (start,))
+    conn.execute("UPDATE readings SET chg_bits=2, vpanel_mv=6500 WHERE t=?", (start,))
     assert energy.soc_estimate(conn, cfg, start + 86400)["soc_mah"] <= cfg.energy.capacity_mah
     conn.execute("DELETE FROM readings")
     add(conn, start)
@@ -134,8 +134,39 @@ def test_soc_anchor_and_clamp(conn, cfg):
 
 def test_projected_days_to_empty_when_negative(conn, cfg):
     start, _ = local_day_bounds(dt.date(2026, 12, 31))
-    add(conn, start, chg=codec.CHG_DONE)
+    add(conn, start, chg=codec.CHG_DONE, vpanel=6500)
     _days(conn, [(2.0, 12.0, 99.0)] * 14)
     v = energy.verdict(conn, cfg, NOW)
     assert v["assessment"] == "deficit" and v["projected_days_to_empty"] is not None
     assert 200 < v["projected_days_to_empty"] < 400
+
+
+def test_done_without_panel_input_is_ignored(conn, cfg):
+    """Night: STAT pins float to 1/1; a DONE bit without panel voltage is not 'full'."""
+    fill_day(conn, DAY, lambda s: {"chg": codec.CHG_DONE, "vpanel": 0})
+    assert energy.rollup_day(conn, cfg, DAY).reached_full is False
+    assert energy.soc_estimate(conn, cfg, local_day_bounds(DAY)[1])["soc_anchor"] is None
+
+
+def test_full_cell_days_make_surplus_even_with_ratio_near_one(conn, cfg):
+    """Accepted harvest is capped by a full cell: ratio ~1 but full most days -> surplus."""
+    _days(conn, [(12.5, 12.0, 99.0)] * 14)
+    conn.execute("UPDATE energy_daily SET reached_full=1 WHERE date >= '2026-12-25'")
+    v = energy.verdict(conn, cfg, NOW)
+    assert v["energy_ratio"] < 1.1 and v["assessment"] == "surplus"
+    assert v["energy_ratio_is_lower_bound"] and "reached full on 7 of 14" in v["assessment_basis"]
+    conn.execute("UPDATE energy_daily SET reached_full=0 WHERE date = '2026-12-25'")
+    assert energy.verdict(conn, cfg, NOW)["assessment"] == "marginal"
+
+
+def test_charging_but_not_panel_limited_removes_awake_load(conn, cfg):
+    """CV taper near full: panel near Voc, ipanel = 25 mA awake load + 5 mA charge."""
+    fill_day(conn, DAY, lambda s: {"ipanel": 30.0, "vpanel": 7300, "vbat": 3550, "chg": codec.CHG_CHRG}
+             if 10 * 3600 <= s < 14 * 3600 else {})
+    r = energy.rollup_day(conn, cfg, DAY)
+    assert r.harvest_mah == pytest.approx((5.0 + energy.avg_load_ma(cfg)) * 4, rel=0.03)
+    conn.execute("DELETE FROM readings")
+    # VINDPM (panel pulled down to vbat + 0.33 V): ipanel is the panel current, counted as is
+    fill_day(conn, DAY, lambda s: {"ipanel": 30.0, "vpanel": 3700, "vbat": 3350, "chg": codec.CHG_CHRG}
+             if 10 * 3600 <= s < 14 * 3600 else {})
+    assert energy.rollup_day(conn, cfg, DAY).harvest_mah == pytest.approx(120.0, rel=0.03)

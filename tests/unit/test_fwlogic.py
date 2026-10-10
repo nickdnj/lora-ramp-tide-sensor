@@ -52,7 +52,7 @@ def test_charger_sequences(name):
     start = L["charger"]["starts"][name]
     s = fw.ChargerState(ce_disabled=start["ce_disabled"], charging_elapsed_s=start["charging_elapsed_s"])
     for step in L["charger"]["sequences"][name]:
-        r = fw.charger_step(s, step["temp_c"], step["stat1"], step["stat2"], step["dt_s"])
+        r = fw.charger_step(s, step["temp_c"], step["stat1"], step["stat2"], step["dt_s"], step["vin_present"])
         assert (r.ce_disabled, r.pulse, r.chg, r.state.charging_elapsed_s) == (
             step["ce_disabled"], step["pulse"], step["chg"], step["charging_elapsed_s"]), step
         s = r.state
@@ -96,3 +96,9 @@ def test_sample_flags(case):
 def test_sd_is_population():
     st = fw.burst_stats([1.0, 3.0], [0.0, 0.0])
     assert st.pitch_sd == pytest.approx(1.0) and not math.isclose(st.pitch_sd, math.sqrt(2))
+
+
+def test_no_false_done_at_night():
+    en = fw.ChargerState(ce_disabled=False)
+    assert not fw.charger_step(en, 10.0, 1, 1, 300, vin_present=False).chg & fw.CHG_DONE
+    assert fw.charger_step(en, 10.0, 1, 1, 300, vin_present=True).chg & fw.CHG_DONE
