@@ -669,7 +669,7 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 
 ## 6. GitHub issues, ready to create later
 
-**Do not create yet.** Nick has not approved a repo or issues. When he does, the list below is complete enough to script. Everything in section 5 is one issue each; the **Body** text in section 5 is the issue body (user story line optional for a solo project). E12.1 goes to the SignBoard repo.
+**Created 2026-10-10:** all 59 stories exist as issues in the public repo (issue titles start with the plan ID, e.g. "E0.1 ..."; milestones M0-M6; labels as below). This document stays the source of the story text; the issues are the working tracker. Original note: When he does, the list below is complete enough to script. Everything in section 5 is one issue each; the **Body** text in section 5 is the issue body (user story line optional for a solo project). E12.1 goes to the SignBoard repo.
 
 ### 6.1 Labels
 
