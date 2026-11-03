@@ -34,6 +34,11 @@ DAY = 86400
 SUBSTANTIVE_TOOL_CALLS = 15   # below this a session is a quick question, not work
 STALE_AFTER = DAY             # uncommitted and untouched this long = left behind
 FORGET_AFTER = 7 * DAY        # stop mentioning an unlogged session after a week
+# Files `aa sync` regenerates; they sit modified between syncs and are not "work left behind".
+GENERATED = (".agentarchitect.json", ".claude/agents/", ".claude/skills/", ".claude/hooks/",
+             ".claude/settings.json", "CLAUDE.md", ".obsidian/")
+# Written by the weekly stale-session digest: {project dir: [session ids not yet wrapped or triaged]}
+STALE_SESSIONS = os.path.expanduser("~/.claude/aa-state/stale-sessions.json")
 
 
 def repo_root(data):
@@ -160,7 +165,7 @@ def on_start(data):
     now = time.time()
     notes = []
 
-    paths = dirty_paths(root, timeout=3) or []
+    paths = [p for p in (dirty_paths(root, timeout=3) or []) if not p.startswith(GENERATED)]
     stale, oldest = 0, now
     for p in paths[:500]:
         try:
@@ -185,6 +190,15 @@ def on_start(data):
         when = time.strftime("%a %b %-d %H:%M", time.localtime(prev["ended"]))
         notes.append(f"The previous working session here (ended {when}, "
                      f"{prev.get('tool_calls', '?')} tool calls) wrote no wiki session log.")
+
+    try:
+        with open(STALE_SESSIONS) as f:
+            stale_ids = json.load(f).get(os.path.realpath(root), [])
+        if stale_ids:
+            notes.append(f"{len(stale_ids)} earlier session(s) in this directory went quiet without wrapping "
+                         f"(listed in the Friday stale-session digest). Offer to triage them; do not start on them unasked.")
+    except Exception:
+        pass
 
     if notes:
         print("AgentArchitect session check (informational):")
