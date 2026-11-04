@@ -28,19 +28,18 @@ The nearest NOAA station to the pilot site (8531942, Long Branch Reach) is a sub
 
 **Is a very small solar panel enough to keep this node alive through a New Jersey winter?**
 
-The node is designed to use roughly 12 mAh per day. A 1 W panel on a vertical south-facing aluminum face should have a wide margin on paper, but cold-charge limits on LiFePO4 cells, shading, and real sleep current can break the paper numbers. The pilot logs panel current, battery state and charger status so that, after a winter, the data answers the question, and a half-watt panel's result can be inferred by halving the harvest.
+The node is designed to use roughly 10 to 15 mAh per day, depending on radio settings. A 1 W panel on a vertical south-facing aluminum face should have a wide margin on paper, but cold-charge limits on LiFePO4 cells, shading, and real sleep current can break the paper numbers. The pilot logs panel current, cell current, battery voltage and temperature, and charger status so that, after a winter, the data answers the question, and a half-watt panel's result can be inferred by halving the harvest.
 
 ## How it works
 
 ```mermaid
 flowchart LR
     subgraph Ramp["Under the ramp"]
-        S["SCL3300 inclinometer"] --> N["Heltec WiFi LoRa 32 V3<br/>custom MeshCore firmware"]
+        S["SCL3300 inclinometer"] --> N["Heltec WiFi LoRa 32 V3<br/>custom push-and-sleep firmware"]
         P["1 W solar panel"] --> C["BQ25185 charger<br/>+ LiFePO4 cell"] --> N
     end
-    N -- "LoRa, private frequency<br/>encrypted channel" --> R["MeshCore repeater"]
-    R --> G["Gateway radio (USB)"]
-    G --> T["tidesvc on a mini PC<br/>SQLite + JSON API"]
+    N -- "LoRa point-to-point, private frequency<br/>encrypted frame" --> G["Receiver/gateway<br/>(Heltec V3 on Wi-Fi)"]
+    G -- "HTTP POST, port 8120" --> T["tidesvc on a mini PC<br/>SQLite + JSON API"]
     NOAA["NOAA predictions<br/>CO-OPS API"] --> T
     W["Tempest weather station<br/>(optional)"] --> T
     T --> HA["Home Assistant"]
@@ -49,8 +48,8 @@ flowchart LR
 ```
 
 - **Node:** wakes every 5 minutes, samples the inclinometer for about 3 seconds, sends one small encrypted packet, and sleeps. It never listens, which keeps energy use low.
-- **Transport:** [MeshCore](https://github.com/meshcore-dev/MeshCore) used as a library inside custom firmware. Stock MeshCore sensor firmware keeps the radio listening, which would cost roughly 20 times the node's energy budget.
-- **Server (`tidesvc`):** decodes packets, converts tilt to level, smooths wakes and foot traffic, fits calibration against NOAA's predicted highs and lows, and serves a read-only JSON API.
+- **Transport:** plain LoRa point-to-point (RadioLib) from the node to a receiver/gateway on the local Wi-Fi, which forwards each frame, still encrypted, to the server over HTTP. No repeater and no mesh. An earlier design used [MeshCore](https://github.com/meshcore-dev/MeshCore) through a repeater. With a direct link, a mesh stack adds nothing, so it was dropped (ARCHITECTURE section 2.1).
+- **Server (`tidesvc`):** receives frames from the gateway, decrypts and decodes them, converts tilt to level, smooths wakes and foot traffic, fits calibration against NOAA's predicted highs and lows, and serves a read-only JSON API. A nightly database backup goes to a Google Drive folder.
 - **Errors, not fiction:** if data is stale or a source is down, the API says so. It never shows predictions as observations or demo data.
 - **Optional Tempest input:** barometric pressure trend and sustained onshore wind add context to surge alerts.
 
@@ -60,12 +59,13 @@ flowchart LR
 |---|---|
 | MCU + LoRa | Heltec WiFi LoRa 32 V3, 915 MHz |
 | Tilt sensor | Murata SCL3300 breakout |
-| Cell | 26650 LiFePO4 |
-| Charger | TI BQ25185 (Adafruit 6091 breakout) with NTC cold cutoff |
+| Cell | 26650 LiFePO4 (planned at 3200 mAh) |
+| Charger | TI BQ25185 (Adafruit 6091 breakout) with NTC cold cutoff, plus a battery thermistor for the firmware 0 °C rule |
 | Panel | 1 W flexible amorphous |
 | Antenna | 915 MHz 3 dBi stub |
 | Enclosure | IP67 polycarbonate, clear lid |
 | Mounting | stainless angle bracket, nylon isolating washers, no drilling |
+| Gateway | a second Heltec V3 on Wi-Fi, USB powered |
 
 Full list with links, status and open items: [docs/BOM.md](docs/BOM.md).
 
@@ -74,15 +74,17 @@ Full list with links, status and open items: [docs/BOM.md](docs/BOM.md).
 | Doc | What is in it |
 |---|---|
 | [PRD](docs/PRD.md) | Goals, requirements, success metrics, scope |
-| [Architecture](docs/ARCHITECTURE.md) | Node firmware, gateway, server, API, energy budget, decision records |
+| [Architecture](docs/ARCHITECTURE.md) | Radio link and link budget, node firmware, gateway, server, API, energy budget, decision records |
 | [Bill of materials](docs/BOM.md) | Parts, sources, open items |
 | [Battery and charging](docs/BATTERY.md) | Chemistry, cell, charger, cold-weather behavior, safety, bench tests |
 | [Dev plan](docs/DEV-PLAN.md) | Epics, ordered stories, issue drafts |
 | [Test plan](docs/TEST-PLAN.md) | Bench, RF, server, install and solar-sufficiency protocol |
+| [Build, test and simulate](docs/BUILD.md) | How to run the code and simulator; what the code does not yet match |
 
 ## Honest caveats
 
 - Several battery and firmware numbers are calculated from datasheets, not measured. The docs tag each claim as verified, calculated, inferred or unverified.
+- The direct radio link has no repeater, and its range is not yet measured. The link budget is a set of assumptions until the on-site link test.
 - Accuracy target is plus or minus 5 cm (stretch 2 cm), not survey grade. Freeboard shifts with load, and wakes add noise.
 - Do not plug USB into the node while the LiFePO4 cell is connected until the diode arrangement is bench-tested: the Heltec V3's onboard charger is a 4.2 V Li-ion charger.
 - Hardware is attached to a dock ramp with the owner's permission. Check your own dock's warranty and rules before copying this.
@@ -95,7 +97,7 @@ A ramp-tilt tide gauge has been patented before (US11371841B2, reported lapsed f
 
 The most useful contributions right now:
 
-- **Firmware:** review of the plan for a MeshCore-library sender that sleeps between packets (spike S1 in the dev plan).
+- **Firmware:** review of the plan for a RadioLib sender that sends one encrypted frame and deep-sleeps (spike S1 in the dev plan), and of the small Wi-Fi gateway firmware.
 - **Low-power design:** sleep-current tricks for the Heltec V3, and a sanity check of the LiFePO4 power path.
 - **Calibration:** ideas for fitting offset and effective ramp length from sparse NOAA extremes.
 - **Anyone with a similar ramp:** data from other docks would be valuable.

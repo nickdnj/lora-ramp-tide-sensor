@@ -1,6 +1,8 @@
 # Battery and Charging: LoRa Ramp Tide Sensor Node
 
-Version 0.2, 2026-10-10. Research note for the power subsystem (ADR-006).
+Version 0.3, 2026-11-04. Research note for the power subsystem (ADR-006).
+
+**Changes in v0.3 (2026-11-04):** records Nick's decisions. (1) **Plan with 3200 mAh** for the Bioenno 26650 (the lower listed figure; verify the cell label on arrival). Section 2.1 is recomputed: the margin is about 3.6x and the cold, aged autonomy about 51 days (v0.2 said 3.8x and 55 days at 3300 mAh). Section 7's cell energy is about 10.2 Wh. The charge rates are unchanged at ≤0.06C/0.08C. (2) **The firmware 0 °C rule uses a thermistor on the battery:** a second B3435 NTC on the cell can, read by the MCU (sections 0, 3.4, 4.4, 8, 10). (3) **Cell current is in the payload** (`ibat`, INA3221 ch2; section 3.4). (4) Nick's PVC-tube repeater has been taken down. Its cross-checks below are kept as design history, because they explain part choices (bq24074, B3950 NTC, NL1835).
 
 **Changes in v0.2 (2026-10-10):** records Nick's decisions. NTC option 2 chosen (130 kΩ in parallel with a B3435 NTC; firmware owns the 0 °C rule). BQ25185 / Adafruit 6091, the 26650 cell and the LM66100 feed confirmed. Q7 (enclosure fit) accepted on outside dimensions, still to be physically verified. The CE-polarity fix is now in ARCHITECTURE v0.2. No analysis changed. Inputs: `docs/PRD.md` v0.2, `docs/ARCHITECTURE.md` v0.1 (sections 4.4, 4.5, ADR-006), `docs/BOM.md`. It also cross-checks Nick's 2026-09-29 solar MeshCore PVC-tube repeater design.
 
@@ -18,8 +20,8 @@ Evidence tags used throughout:
 | Item | Decision | Confidence |
 |---|---|---|
 | Chemistry | **LiFePO4, 1S.** Keeps the PRD Q5 default. | High |
-| Cell | **26650 LiFePO4, about 3300 mAh, unprotected**, e.g. Bioenno Power 4-pack (US seller). An 18650 LiFePO4 (1400-1800 mAh) is the fallback if the enclosure is too small. Do **not** use a 14500 (too small). | Medium (stock and brand-specific cold data still to confirm) |
-| Charger | **TI BQ25185 on Adafruit 6091.** Use the 3.65 V jumper (LiFePO4) and the 250 mA ISET jumper, and connect a 10k B3435 NTC **with 130 kΩ in parallel** to the TH pad, bonded to the cell (section 4.4 option 2, **chosen by Nick 2026-10-10**). Firmware owns the 0 °C rule through /CE, with a pull-up so charging is off unless the MCU enables it, and a CE pulse about every 4 h for the safety timer. | High for the part. Medium for the exact cold thresholds (calculated, not measured). |
+| Cell | **26650 LiFePO4, 3200 mAh planning value (Nick, 2026-11-04; verify the cell label), unprotected**, e.g. Bioenno Power 4-pack (US seller). An 18650 LiFePO4 (1400-1800 mAh) is the fallback if the enclosure is too small. Do **not** use a 14500 (too small). | Medium (stock and brand-specific cold data still to confirm) |
+| Charger | **TI BQ25185 on Adafruit 6091.** Use the 3.65 V jumper (LiFePO4) and the 250 mA ISET jumper, and connect a 10k B3435 NTC **with 130 kΩ in parallel** to the TH pad, bonded to the cell (section 4.4 option 2, **chosen by Nick 2026-10-10**). Firmware owns the 0 °C rule through /CE, **using a second thermistor on the battery read by the MCU** (2026-11-04), with a pull-up so charging is off unless the MCU enables it, and a CE pulse about every 4 h for the safety timer. | High for the part. Medium for the exact cold thresholds (calculated, not measured). |
 | Heltec feed | Charger **SYS/LOAD → LM66100 ideal diode → Heltec JP1 (battery JST)**. Do not feed the Heltec 3V3 or 5V pins. | Medium. Needs the bench brownout test. |
 | USB hazard | The ideal diode blocks the Heltec's onboard 4.2 V charger from reaching the LiFePO4 cell. Also label the box and, as procedure, unplug the cell before USB work. | High in principle. Bench-verify. |
 | Protection | 1 A fuse at the cell + terminal. The charger provides CV limit, BUVLO 3.0 V and reverse OCP. Optional LiFePO4 PCM. | Medium |
@@ -35,12 +37,12 @@ Evidence tags used throughout:
 | Chemistry | Cold charge | Cold discharge | Fit to this node | Verdict |
 |---|---|---|---|---|
 | **LiFePO4 (LFP)** | Not below 0 °C. Example cells: Bioenno 26650 rated 0-45 °C [V]; Tenergy 30085 18650 rated 0-45 °C [V] | Bioenno -20 to 60 °C [V]; Tenergy -20 to 60 °C [V], keeping ≥40% capacity at -20 °C and ≥60% at 0 °C, both at 0.5C [V] | Most thermally stable lithium chemistry [I]. Flat 3.2-3.3 V plateau. Long cycle life [I]. A 3.6 V class charger exists with an NTC input (BQ25185) [V]. **Downsides:** low headroom for the Heltec's 3.3 V LDO, and the Heltec onboard charger is Li-ion. | **Chosen** |
-| Li-ion (NMC/NCA, 4.2 V) | Not below 0 °C, the same as LFP for typical cells [I] | Fine to about -20 °C [I] | More headroom above the LDO, matches the Heltec onboard charger (no USB overcharge hazard), more Wh per cell. Nick's PVC repeater uses this route (bq24074 plus Nitecore NL1835 protected Li-ion cells). Higher thermal-runaway energy [I]. Holding 4.2 V on hot summer days speeds aging [I]. | **Fallback**, if the bench brownout test fails on LFP (section 3.4) |
+| Li-ion (NMC/NCA, 4.2 V) | Not below 0 °C, the same as LFP for typical cells [I] | Fine to about -20 °C [I] | More headroom above the LDO, matches the Heltec onboard charger (no USB overcharge hazard), more Wh per cell. Nick's PVC repeater (taken down 2026-11-04) used this route (bq24074 plus Nitecore NL1835 protected Li-ion cells). Higher thermal-runaway energy [I]. Holding 4.2 V on hot summer days speeds aging [I]. | **Fallback**, if the bench brownout test fails on LFP (section 3.4) |
 | LTO (lithium titanate) | Charges well below 0 °C [I] | Excellent [I] | 2.4 V nominal. The BQ25185 cannot regulate it (its VREG range is 3.6-4.4 V [V]). It would need a boost converter plus a special charger. No small cylindrical LTO cell was sourced. | Rejected |
 | Primary Li-SOCl2 (e.g. a D-size bobbin cell) | n/a | Very good [I] | About 17 Ah would last years at 12 mAh/day [C], but **it defeats the pilot's purpose**, which is the solar test. It also needs a pulse capacitor for 145 mA TX bursts [I]. | Rejected for the pilot. Keep as the "solar failed" fallback. |
 | Supercap / LIC hybrid | Charges cold [I] | Good [I] | 14 days at 25 mAh/day is about 1.2 Wh at 3.3 V [C]. That needs a large ultracap bank plus a buck-boost converter, and leakage eats into the budget [I]. It would not fit the concealed box. | Rejected |
 
-**Why the decision stays LFP.** Both lithium chemistries need the same 0 °C charge cutoff, so neither avoids the cold problem. LFP is the safer chemistry for an unattended cell in a sealed box under a public dock. Its weakness, a low voltage on a 3.3 V LDO board, is measurable and fixable (section 3). Li-ion remains a known-good fallback because the repeater design already uses it.
+**Why the decision stays LFP.** Both lithium chemistries need the same 0 °C charge cutoff, so neither avoids the cold problem. LFP is the safer chemistry for an unattended cell in a sealed box under a public dock. Its weakness, a low voltage on a 3.3 V LDO board, is measurable and fixable (section 3). Li-ion remains a known-good fallback because the repeater design used it.
 
 **Cross-check with the repeater design.** The bq24074 on Adafruit 4755 is a **Li-ion/LiPo charger only**: 3.7 V nominal / 4.2 V charge, and the product page says "For use with Adafruit Lipoly/LiIon batteries only" [V, [Adafruit 4755](https://www.adafruit.com/product/4755)]. It is **not** LiFePO4-compatible. The repeater is consistent, because it uses Li-ion Nitecore NL1835 cells. Do not reuse the bq24074 for this node.
 
@@ -51,23 +53,23 @@ Evidence tags used throughout:
 | Term | Value | Basis |
 |---|---|---|
 | Load, design budget | 25 mAh/day | ARCHITECTURE 4.4 (nominal 11-12.5) |
-| LFP self-discharge | 1-3 %/month of capacity, so about 1-3.3 mAh/day for a 3300 mAh cell | [I] typical LFP. The vendor did not state a figure [U]. |
+| LFP self-discharge | 1-3 %/month of capacity, so about 1-3.2 mAh/day for a 3200 mAh cell | [I] typical LFP. The vendor did not state a figure [U]. |
 | BQ25185 battery quiescent current | ≤5 µA, about 0.12 mAh/day | [V] IQ_BAT 4 µA typ / 5 µA max, 0-85 °C. Not specified below 0 °C. |
 | LM66100 ideal diode quiescent current | ≤0.3 µA, negligible | [V] TI product page |
-| **Planning drain** | **about 28.5 mAh/day** | [C] |
+| **Planning drain** | **about 28.5 mAh/day** (28.3 with 3200 mAh; kept at 28.5) | [C] |
 | 14 days | about 400 mAh | [C] |
 | Cold derating at -15 °C | 0.6 | [I] The Tenergy spec gives ≥40% at -20 °C at a 0.5C rate [V]. Our average current is about C/3000 with short 0.05C pulses, so the real derating is much milder. 0.6 is a conservative planning value. |
 | Aging (end of pilot plus 2 years) | 0.8 | [I] |
 | Usable above BUVLO (3.0 V) | 0.95 | [I] LFP has very little capacity below 3.0 V |
 | **Minimum rated capacity** | **about 880 mAh** | [C] 400 / (0.6 × 0.8 × 0.95) |
 
-Result: a 14500 LFP (about 550-600 mAh, e.g. [Silicognition on Tindie](https://www.tindie.com/products/silicognition/550-600-mah-lifepo4-aa-14500-cell-32v/)) **fails** the requirement. An 18650 LFP (1400-1800 mAh) passes with 1.6-2x margin. A **26650 LFP (about 3300 mAh) gives about 3.8x margin**, about 55 days at the full cold and aged planning drain [C]. That covers a multi-week cold spell in which charging is inhibited (section 4.3). **Choose the 26650.**
+Result: a 14500 LFP (about 550-600 mAh, e.g. [Silicognition on Tindie](https://www.tindie.com/products/silicognition/550-600-mah-lifepo4-aa-14500-cell-32v/)) **fails** the requirement. An 18650 LFP (1400-1800 mAh) passes with 1.6-2x margin. A **26650 LFP at the 3200 mAh planning value gives about 3.6x margin** (3200 / 880), and about **51 days** at the full cold and aged planning drain [C]: 3200 × 0.6 × 0.8 × 0.95 ≈ 1460 mAh usable, divided by 28.5 mAh/day. (v0.2 said about 3.8x and 55 days for 3300 mAh. Recomputed at 3300 mAh, the same method gives about 53 days.) That covers a multi-week cold spell in which charging is inhibited (section 4.3). **Choose the 26650.**
 
 ### 2.2 Candidate cells (US sources first)
 
 | Cell | Capacity | Charge / discharge temperature | Protected | Source | ~$ | Status |
 |---|---|---|---|---|---|---|
-| **Bioenno Power 26650 LFP, 3.2 V** (4-pack) | 3300 mAh rated | 0-45 °C / -20-60 °C [V] | No (vendor says it must be used with a PCM/BMS) | [bioennopower.com](https://www.bioennopower.com/products/26650-3-2v-3200-mah-2c-lifepo4-cells-4-pcs) (Santa Ana, CA) | 29.99 per 4 [V] | **Recommended.** Stock not shown on the page [U]. The listing gives only an MSDS, no full spec sheet [U]. |
+| **Bioenno Power 26650 LFP, 3.2 V** (4-pack) | 3300 mAh in v0.2's reading of the page; the listing URL says 3200 mAh. **Plan with 3200** (Nick, 2026-11-04) [U until the label is read] | 0-45 °C / -20-60 °C [V] | No (vendor says it must be used with a PCM/BMS) | [bioennopower.com](https://www.bioennopower.com/products/26650-3-2v-3200-mah-2c-lifepo4-cells-4-pcs) (Santa Ana, CA) | 29.99 per 4 [V] | **Recommended.** Stock not shown on the page [U]. The listing gives only an MSDS, no full spec sheet [U]. |
 | JGNE 26650 LFP | 3000 mAh, 3.65 V max | not listed on the page | No | [18650batterystore](https://www.18650batterystore.com/products/jgne-26650-3000mah-battery) (GA) | 6.99 | Sold out when checked [V]. A [spec PDF](https://cdn.shopify.com/s/files/1/0481/9678/0183/files/HTPFR26650-3000-3.2V_Specification.pdf?v=1612938206) is linked but was not read [U]. |
 | JGNE 18650 LFP | 1800 mAh | not listed | No | [18650batterystore](https://18650batterystore.com/products/jgne-18650-1800) | 4.99 | Sold out when checked [V]. 18650 fallback. |
 | Tenergy 30085-0 18650 LFP | 1450 mAh | 0-45 / -20-60 °C, -20 °C ≥40% [V, [datasheet](https://files.batteryjunction.com/frontend/files/Tenergy-30085-0-datasheet.pdf)] | No | [Battery Junction](https://www.batteryjunction.com/products/tenergy-30085-18650) | 4.49 | **Discontinued / sold out** [V]. Its datasheet is the best cold-capacity reference found. |
@@ -75,7 +77,7 @@ Result: a 14500 LFP (about 550-600 mAh, e.g. [Silicognition on Tindie](https://w
 
 **Protected vs unprotected.** No protected LiFePO4 18650 or 26650 cell with an in-can PCB was found at a US seller [V, search]. The plan uses an unprotected cell. Protection comes from the BQ25185 (CV, BUVLO, reverse OCP), a fuse, and optionally a 1S LiFePO4 PCM (section 7).
 
-**Repeater cross-check.** The repeater's Nitecore NL1835 (3500 mAh, protected, 18.2 × 69.2 mm) is a **Li-ion** cell. Do not mix it into this node. Its sourcing note still applies: avoid no-name cells from Amazon and buy from specialty battery sellers.
+**Repeater cross-check (design history; the repeater was taken down 2026-11-04).** The repeater's Nitecore NL1835 (3500 mAh, protected, 18.2 × 69.2 mm) is a **Li-ion** cell. Do not mix it into this node. Its sourcing note still applies: avoid no-name cells from Amazon and buy from specialty battery sellers.
 
 ### 2.3 Enclosure fit [I, from external dimensions; internal dimensions not verified]
 
@@ -126,7 +128,7 @@ Brownout behavior in this range is **[U]** and must be measured (section 8). Hel
 | D. External supply into the 5V / VDD_5V pin | **Rejected** | VDD_5V powers the LGS4056 charger (VCC). Anything fed there would start charging whatever is on JP1 to 4.2 V [V, schematic]. |
 | E. Buck-boost (fixed about 3.6-3.8 V out) → JP1 | Fallback if the brownout test fails | Gives the LDO full headroom at any cell voltage. It adds converter quiescent current; candidate parts were not verified [U]. |
 
-The repeater found the same kind of trap: the bq24074 LOAD output reaches 4.4 V while the RAK19007 battery input maximum is 4.3 V, so the RAK was wired straight to the cells. For the Heltec, the equivalent check passes: 4.5 V from SYS is acceptable on the VBAT net [I]. For the RAK path it fails (section 5).
+The (now taken-down) repeater design found the same kind of trap: the bq24074 LOAD output reaches 4.4 V while the RAK19007 battery input maximum is 4.3 V, so the RAK was wired straight to the cells. For the Heltec, the equivalent check passes: 4.5 V from SYS is acceptable on the VBAT net [I]. For the RAK path it fails (section 5).
 
 ### 3.4 Safest wiring (recommended)
 
@@ -136,7 +138,9 @@ The repeater found the same kind of trap: the bq24074 LOAD output reaches 4.4 V 
 
  Adafruit 6091 BATT JST-PH (+) ──[INA3221 ch2 shunt]──[1 A fuse]──► 26650 LFP (+)
  Adafruit 6091 BATT (−) ───────────────────────────────────────────► 26650 LFP (−)
- Adafruit 6091 TH pad (TH trace CUT) ── 10k B3435 NTC ∥ 130k 1% ── GND   (NTC bonded to the cell can, under Kapton + foam; 130k per section 4.4 option 2)
+ Adafruit 6091 TH pad (TH trace CUT) ── 10k B3435 NTC ∥ 130k 1% ── GND   (charger NTC, hardware backstop; bonded to the cell can, under Kapton + foam; 130k per section 4.4 option 2)
+ Heltec Vext (3.3 V, switched) ──[10k 0.1%]──┬──► Heltec ADC1 GPIO   (battery thermistor for the firmware 0 °C rule, 2026-11-04)
+                                              └── 10k B3435 NTC ── GND   (second NTC, bonded to the cell can beside the charger's, same foam sleeve)
  Adafruit /CE pad ──[1 MΩ]──► SYS   (fail-safe pull-up: charging OFF unless the MCU drives /CE LOW)
 
  Adafruit 6091 LOAD/SYS (+) ──► LM66100 VIN ; LM66100 VOUT ──► Heltec JP1 (+)   (CE pin of LM66100 to GND = enabled)
@@ -148,7 +152,8 @@ The repeater found the same kind of trap: the bq24074 LOAD output reaches 4.4 V 
 
 Notes:
 
-- **INA3221 channel 2 sits on the cell side.** It measures net cell current, charge minus load. The Heltec's own battery ADC now reads SYS, not the cell, so use the INA3221 for `vbat`.
+- **INA3221 channel 2 sits on the cell side.** It measures net cell current, charge minus load, and from v0.3 that current is sent as `ibat` (positive = charging; ARCHITECTURE 4.7). The reading is a snapshot taken while the node is awake. The Heltec's own battery ADC now reads SYS, not the cell, so use the INA3221 for `vbat`.
+- **Two thermistors on the cell, two independent layers.** The charger NTC (TH pad, with 130k) is the hardware backstop at about -3 °C. The MCU's NTC is a plain divider from switched Vext: under 0.2 mA, only while awake. Firmware reads it with the ESP32-S3's calibrated ADC (ADC1, so it is usable with Wi-Fi code too) and converts with the B3435 beta equation. At 0 °C the NTC is about 29 kΩ, so the pin sits near 2.45 V (inside the ADC's range at full attenuation [I]). An open or shorted NTC reads near a rail: that is "temperature unknown", and charging is disabled. Accuracy near 0 °C is expected to be about ±0.5 °C with a 1% NTC [C/I]; B9/T2 measures it against a thermocouple. Do not tap the charger's TS node with the ADC instead: the TS bias exists only with VIN present [I], and loading it shifts the hardware thresholds.
 - **JP1 is a 1.25 mm 2-pin connector** [V, schematic], not JST-PH. Use a 1.25 mm pigtail and **check its polarity with a meter.** Pigtail polarity varies between vendors [I].
 - **STAT pins drive the onboard LEDs** (S1 = red FAULT, S2 = orange CHRG [V, Adafruit guide]). In daytime cold inhibit, the red FAULT LED may be lit off the panel supply, wasting a little harvest. Where the LED pull-up returns is [U]: check the Adafruit schematic and measure so a GPIO never sees more than 3.3 V. Remove or cut the LEDs if the board allows it.
 - **CE polarity: the BQ25185 /CE is active-low.** HIGH disables charging [V]. ARCHITECTURE v0.1 (section 4.2 notes) said "drives the charger's CE pin low when … below +2 °C", which is the wrong polarity for this part. Fixed in ARCHITECTURE v0.2 (sections 4.2 and 4.3).
@@ -212,7 +217,7 @@ R = V / 38 µA and the beta equation give:
 | Cold, charging resumes | 0.82 V | 21.6 kΩ | **about +6.3 °C** | about +8.6 °C |
 | Hot, charging stops | 0.115 V | 3.0 kΩ | about +59 °C | about +55 °C |
 
-- **NTC type matters.** The repeater bought a B3950 NTC on Amazon (DIKAVS B074JBZ63Z). On the BQ25185 that type shifts the cold window about 3 °C warmer, costing winter charge hours. Buy a **B25/85 = 3435 K** part (Semitec 103AT-2 class) [I, that series is commonly specified as 3435 K; confirm on the distributor page].
+- **NTC type matters.** The (former) repeater build bought a B3950 NTC on Amazon (DIKAVS B074JBZ63Z). On the BQ25185 that type shifts the cold window about 3 °C warmer, costing winter charge hours. Buy a **B25/85 = 3435 K** part (Semitec 103AT-2 class) [I, that series is commonly specified as 3435 K; confirm on the distributor page].
 - **Placement:** bond the NTC to the middle of the cell can with Kapton tape, under a closed-cell foam sleeve over the cell. Then it reads cell temperature, not air temperature or the charger IC's self-heating. The charger dissipates almost nothing at VINDPM: (3.6 V − 3.3 V) × 0.18 A ≈ 50 mW [C].
 
 ### 4.4 The hysteresis problem and mitigations
@@ -224,7 +229,7 @@ January air at nearby Long Branch averages highs of about 38-41 °F (3-5 °C) an
 Options:
 
 1. **Pilot default:** use the stock thresholds and log `charge_inhibit_cold_h`. The pilot exists to measure this. The 26650's about 55-day cold reserve (section 2.1) covers the risk.
-2. **Window shifted down, firmware owns the 0 °C rule:** put about **130 kΩ in parallel with the NTC**. Then the hardware stops at about -3 °C and resumes at about +2.4 °C [C]. Firmware drives /CE HIGH (disable) below +1 °C and LOW above +2 °C, using the INA3221-side or SCL3300 temperature. The hardware layer becomes a backstop at -3 °C. That is slightly beyond the cell's 0 °C rating, but only reached if the firmware fails, and the charge rate is ≤0.06C [C, 0.18 A / 3.3 Ah]. **Chosen by Nick, 2026-10-10.**
+2. **Window shifted down, firmware owns the 0 °C rule:** put about **130 kΩ in parallel with the NTC**. Then the hardware stops at about -3 °C and resumes at about +2.4 °C [C]. Firmware drives /CE HIGH (disable) below +1 °C and LOW above +2 °C, **using a second thermistor on the battery** (section 3.4; Nick, 2026-11-04; v0.2 had left the INA3221-side or SCL3300 temperature open). The hardware layer becomes a backstop at -3 °C. That is slightly beyond the cell's 0 °C rating, but only reached if the firmware fails, and the charge rate is ≤0.06C [C, 0.18 A / 3.2 Ah]. **Chosen by Nick, 2026-10-10.**
 3. **Thermal coupling (evaluate, do not assume):** bond the enclosure to the inner face of the south side member, behind the panel. The sun-heated aluminum then warms the cell exactly when charge is available. The cost is higher summer cell temperatures, with the hot cutoff at about 59 °C [I]. Log cell temperature to decide.
 
 **Fail-safe /CE design (any option):** add a 1 MΩ pull-up from /CE to SYS, so charging is **disabled** unless the MCU actively holds /CE low. Use `gpio_hold_en` / RTC hold so the state survives deep sleep. If the battery is flat and the MCU is dead, SYS is still powered from the panel in sun, so the MCU boots and can re-enable charging [I, power-path behavior; bench-verify]. The Adafruit board's existing pull on /CE is [U].
@@ -275,7 +280,7 @@ At night, 0 mAh is harvested. The cell carries about 12 h × 1-1.2 mAh/h, about 
 | Over-discharge | BQ25185 BUVLO cuts SYS at 3.0 V [V]. Firmware lengthens the reporting interval earlier (ARCHITECTURE 4.3). Leakage below BUVLO (charger about 5 µA, INA3221 off) takes months to matter [C]. | V / C |
 | Short circuit / wiring fault | **1 A fast fuse or a 0.5-0.75 A-hold PTC within 2 cm of the cell (+)**, ahead of everything, including the INA3221 shunt. BQ25185 reverse OCP at 3.13 A is a second layer [V]. The 5 A blade fuse from the repeater list is too large; that list already flags it. | I / V |
 | Reverse polarity | Heltec JP1 has an N-MOSFET in the negative lead [V, schematic; function I]. **The BQ25185 board has none [I].** Use keyed JST-PH, meter-check every pigtail, and color-code the leads. The RAK19007 has none either (repeater finding). | I |
-| Fire risk (unattended cell in a box) | LFP has much higher thermal-runaway onset and lower energy release than NMC [I]. A single cell is about 10.5 Wh [C]. Use a fused, strain-relieved, fully enclosed holder. Keep the box away from wood decking if possible; the mount is on aluminum. Charge rate is ≤0.08C [C]. | I |
+| Fire risk (unattended cell in a box) | LFP has much higher thermal-runaway onset and lower energy release than NMC [I]. A single cell is about 10.2 Wh at 3200 mAh [C]. Use a fused, strain-relieved, fully enclosed holder. Keep the box away from wood decking if possible; the mount is on aluminum. Charge rate is ≤0.08C [C]. | I |
 | Venting / pressure | IP67 boxes pump moist air through glands during day-night cycling [I]. Fit an **ePTFE membrane breather vent**. It also gives a vent path if a cell ever vents. Add desiccant, and inspect it monthly (PRD runbook). | I |
 | Salt and humidity | Conformal coat the Heltec, the charger and the INA3221. Keep connectors, the antenna SMA and the USB-C port uncoated. Put dielectric grease on the JST and fuse contacts. Use tinned copper wire. Make drip loops below the glands. | I |
 | Corrosion and galvanic coupling | The cell holder's nickel-plated springs corrode in salt air [I]. A spot-welded tab cell with a soldered pigtail is better than spring holders for a multi-year install [I]. Isolate stainless hardware from the aluminum (nylon washers, BOM item 9). | I |
@@ -286,9 +291,9 @@ At night, 0 mAh is harvested. The cell carries about 12 h × 1-1.2 mAh/h, about 
 
 | # | Item | Pick | Source | ~$ | Tag |
 |---|---|---|---|---|---|
-| B1 | LFP cells | Bioenno 26650 3.2 V 3300 mAh, 4-pack | [bioennopower.com](https://www.bioennopower.com/products/26650-3-2v-3200-mah-2c-lifepo4-cells-4-pcs) | 30 | V (stock U) |
+| B1 | LFP cells | Bioenno 26650 3.2 V, 3200 mAh planning value (verify label), 4-pack | [bioennopower.com](https://www.bioennopower.com/products/26650-3-2v-3200-mah-2c-lifepo4-cells-4-pcs) | 30 | V (stock U) |
 | B2 | Charger | Adafruit 6091 bq25185 USB/DC/Solar (buy 2) | [adafruit.com/product/6091](https://www.adafruit.com/product/6091) | 14 | V |
-| B3 | NTC | 10 kΩ, B25/85 = 3435 K, epoxy bead with leads (Semitec 103AT-2 class) | Digi-Key / Mouser | 2-5 | U (search the part at the distributor) |
+| B3 | NTC (×2: charger TS and MCU battery thermistor) | 10 kΩ, B25/85 = 3435 K, epoxy bead with leads (Semitec 103AT-2 class) | Digi-Key / Mouser | 4-10 | U (search the part at the distributor) |
 | B4 | Parallel resistor (option 2, chosen) | 130 kΩ 1% | any | <1 | C |
 | B5 | Ideal diode | TI LM66100DCKR + SC-70-6 adapter board, or LM66100EVM | [TI](https://www.ti.com/product/LM66100), Digi-Key | 2-15 | V (part) / U (adapter) |
 | B6 | Fuse | 1 A fast inline or 0.5-0.75 A-hold PTC | any | 3 | I |
@@ -297,6 +302,7 @@ At night, 0 mAh is harvested. The cell carries about 12 h × 1-1.2 mAh/h, about 
 | B9 | Breather vent | ePTFE screw-in vent sized to the enclosure | Digi-Key | 5-10 | U |
 | B10 | Optional LFP PCM | 1S LiFePO4 protection board with stated thresholds | see section 7 | 3-30 | U |
 | B11 | Panel | 6 V 1 W IP67. Adafruit 3809 is **out of stock** [V], so use the BOM's silicone alternative or an equivalent with Voc ≤ 18 V. | BOM item 6 | 15-20 | V |
+| B12 | Thermistor reference resistor | 10 kΩ 0.1% (or 1% if 0.1% is not stocked; costs about 0.25 °C) | any | <1 | C |
 
 Battery subsystem total, excluding the panel: about **$70-90** for one node plus spares.
 
@@ -309,7 +315,7 @@ Record results in `docs/bench/`. Equipment: PPK2 or Otii, bench supply, DMM, osc
 | ID | Test | Pass criteria |
 |---|---|---|
 | T1 | Charger configuration. With the cell at about 50% SOC and a bench supply at 6 V through 33 Ω (panel emulator), measure CV voltage at the end of charge, and ICHG. | VBAT holds at 3.65 V ±20 mV; ICHG ≈ 250 mA, or limited by the emulator |
-| T2 | **Cold inhibit.** Cell plus NTC in the freezer to -10 °C, then warm slowly in still air with VIN applied. Log NTC/thermocouple temperature, STAT1/2 and the INA3221 cell current every 30 s. Repeat cooling from +10 °C. | Charging stops at ≤ +3 °C falling and restarts at a logged temperature (expect about +6 °C stock, about +2.4 °C with 130k). STAT = 0/1 while inhibited. **SYS stays up and the load runs from VIN during inhibit.** |
+| T2 | **Cold inhibit.** Cell plus both NTCs in the freezer to -10 °C, then warm slowly in still air with VIN applied. Log the MCU battery-thermistor reading, a reference thermocouple, STAT1/2 and the INA3221 cell current every 30 s. Repeat cooling from +10 °C. Record the thermistor-vs-thermocouple error near 0 °C. | Charging stops at ≤ +3 °C falling and restarts at a logged temperature (expect about +6 °C stock, about +2.4 °C with 130k). STAT = 0/1 while inhibited. **SYS stays up and the load runs from VIN during inhibit.** |
 | T3 | Firmware /CE override and fail-safe pull-up. Force temperature below the firmware threshold and confirm CE goes HIGH and holds through deep sleep. Remove MCU power and confirm charging stays disabled until the MCU boots from SYS on VIN. | As described |
 | T4 | **Brownout sweep.** Feed the full path (bench supply → BQ25185 BAT, VIN off → LM66100 → JP1). Step 3.6 → 2.9 V in 50 mV steps. Each step runs one full cycle including 22 dBm TX. Scope the 3V3 rail during TX and record the reset reason. Repeat at 14 dBm, and with the cell itself at -15 °C. | No brownout reset at ≥3.05 V supply. Record the minimum rail during TX and the lowest working supply voltage. If resets occur above 3.15 V, apply option E (buck-boost) or the Li-ion fallback. |
 | T5 | **Sleep current** of the whole node at the cell (PPK2 in series with the cell), VIN off, at 25 °C and -15 °C | ≤100 µA (budget). Record `i_sleep_ua` for the server config. |
@@ -323,7 +329,9 @@ Record results in `docs/bench/`. Equipment: PPK2 or Otii, bench supply, DMM, osc
 
 1. **Actual TS bias and cold temperatures** of the BQ25185. They are calculated from the datasheet voltages and an inferred 38 µA bias, so T2 must measure them.
 2. **Heltec V3 brownout on LFP** and the CE6260 dropout (no primary datasheet found). T4 measures both.
-3. **Fraction of winter sun hours with the cell at or above the restart temperature.** Unknown until pilot telemetry. (Option 2 is chosen; the telemetry now measures how much the firmware's +1/+2 °C rule costs.)
+3. **Fraction of winter sun hours with the cell at or above the restart temperature.** Unknown until pilot telemetry. (Option 2 is chosen; the telemetry, now including `tbat`, measures how much the firmware's +1/+2 °C rule costs.)
+9. **Battery-thermistor accuracy near 0 °C** through the ESP32-S3 ADC (section 3.4; T2).
+10. **Bioenno capacity on the label** (3200 mAh planned; the listing has shown both 3200 and 3300).
 4. Bioenno stock, full spec sheet and self-discharge figure. Ask the vendor or measure.
 5. LED pull-up rail and default /CE pull on the Adafruit 6091 (check the schematic).
 6. Whether SYS stays powered from VIN during a TS fault (expected from the power-path design). T2 confirms it.
@@ -357,3 +365,4 @@ Record results in `docs/bench/`. Equipment: PPK2 or Otii, bench supply, DMM, osc
 |---|---|---|---|
 | 0.1 | 2026-10-10 | research agent | First version: chemistry, cell, Heltec feed, charger, RAK, energy, safety, shopping list, bench plan. Cross-checked against the 2026-09-29 PVC repeater design. |
 | 0.2 | 2026-10-10 | software-architecture agent (doc reconciliation) | Recorded Nick's decisions: NTC option 2 (130k ∥ B3435), /CE fail-safe pull-up in the wiring, Q7 accepted pending a physical fit, CE-polarity note points to ARCHITECTURE v0.2. |
+| 0.3 | 2026-11-04 | software-architecture agent (doc reconciliation) | 3200 mAh planning capacity and section 2.1 recomputed (3.6x, about 51 days); battery thermistor for the firmware 0 °C rule (wiring, B3/B12, T2); `ibat` sent; repeater references marked as design history. |

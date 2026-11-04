@@ -1,14 +1,16 @@
 # Test Plan: LoRa Ramp Tide Sensor (one-node pilot)
 
-**Version:** 0.2 (draft)
-**Last Updated:** 2026-10-10
+**Version:** 0.3 (draft)
+**Last Updated:** 2026-11-04
 **Author:** Nick DeMarco, with AI assistance (qa-strategy agent)
 **Status:** Draft, for Nick's review
-**Inputs:** `docs/PRD.md` v0.3, `docs/ARCHITECTURE.md` v0.2 plus Nick's answers log, `docs/BATTERY.md` v0.2, `docs/BOM.md` v0.2
+**Inputs:** `docs/PRD.md` v0.4, `docs/ARCHITECTURE.md` v0.3 plus Nick's answers log, `docs/BATTERY.md` v0.3, `docs/BOM.md` v0.3
+
+**Changes in v0.3 (2026-11-04):** the repeater is taken down and the link is direct LoRa point-to-point to a Wi-Fi gateway posting to `tidesvc` (MeshCore dropped, ARCHITECTURE 2.1). B1 (S1), the RF section (single hop; RF-5 and RF-6 replaced, RF-7 now covers gateway faults), SV-D2/D3/D5/D7, SV-A6 and SV-A11 are rewritten. `REPEATER_SILENT` cases are removed and `NODE_SILENT` is fixed at 30 min. The cold rule now runs on the battery thermistor (FW-U7, B7, B9). Payload v2 adds `ibat`/`tbat` (FW-U1, FW-U2, B10, 8.1). The cell is planned at 3200 mAh. New: FW-U11 (frame/AEAD), SV-D8 (ingest auth).
 
 **Changes in v0.2 (2026-10-10):** charger is the BQ25185, so FW-U7 is rewritten for the correct /CE polarity (HIGH = disabled) and the +1/+2 °C firmware rule, FW-U10 (safety-timer CE pulse) and B13 are added, B9 pass criteria reflect the 130 kΩ hardware backstop at about -3 °C (firmware alone owns 0 °C), and B10's harvest check accounts for the power path. RF section restated for flood routing through Nick's repeater with per-hop margin. RF-7 now expects repeater health (`REPEATER_SILENT`) instead of a known gap. Alert tests cover `ENERGY_NEGATIVE_STREAK` (early warning) and `REPEATER_SILENT`. Section 11 updated; remaining open items moved to DEV-PLAN section 7.
 
-This is a hobby build with one node, one gateway and one repeater. The plan is deliberately small: automate what is cheap and deterministic (codec, math, server behavior), bench-measure what the whole project depends on (energy, cold charging, link margin), and treat the field phases as the real acceptance test. Bench results go in `docs/bench/` (per ARCHITECTURE section 10). Nothing here is a coverage target; the gate is the pass criteria below.
+This is a hobby build with one node and one Wi-Fi gateway (no repeater). The plan is deliberately small: automate what is cheap and deterministic (codec, math, server behavior), bench-measure what the whole project depends on (energy, cold charging, link margin), and treat the field phases as the real acceptance test. Bench results go in `docs/bench/` (per ARCHITECTURE section 10). Nothing here is a coverage target; the gate is the pass criteria below.
 
 ---
 
@@ -35,14 +37,14 @@ Likewise on energy: break-even harvest at the 25 mAh/day design budget is roughl
 | Host unit (firmware logic) | Codec, stats, battery state machine, CE-override rule | PlatformIO `native` env | Yes |
 | Host unit (server) | Codec, conversion, calibration fit, residual, energy, alerts, API | pytest (frozen clock, respx fixtures) | Yes |
 | Bench (hardware) | Noise, temperature drift, scale, sleep/awake current, brownout, cold charge | Bench + freezer, results in `docs/bench/` | Manual |
-| RF | Bench link, fade margin, range test, repeater hop | Field | Semi (logs from tidesvc) |
+| RF | Bench link, fade margin, range test, gateway placement | Field | Semi (logs from tidesvc) |
 | End-to-end soak | Whole chain incl. NOAA, email, restart/outage injection | Bench then installed | Semi |
 | Install acceptance | Calibration and tape-measure checks | On the ramp | Manual |
 | Solar sufficiency | Winter energy log analysis | Field, Dec-Feb | Computed by `tidesvc` energy module plus a one-off analysis script |
 
-**Equipment:** current meter with microamp resolution and logging (Nordic PPK2, Otii, or uCurrent plus a logging DMM); freezer plus a thermocouple or a second NTC for ground-truth temperature; a tilt rig with a sine bar or gauge blocks (or a digital level of known accuracy as the reference); bench supply with current limit; a 10 dB SMA attenuator (and a 20 dB if available); a spare Heltec V3 for spectrum sniffing and as a stand-in gateway; tape measure (mm), digital level, camera.
+**Equipment:** current meter with microamp resolution and logging (Nordic PPK2, Otii, or uCurrent plus a logging DMM); freezer plus a thermocouple or a second NTC for ground-truth temperature; a tilt rig with a sine bar or gauge blocks (or a digital level of known accuracy as the reference); bench supply with current limit; a 10 dB SMA attenuator (and a 20 dB if available); a spare Heltec V3 for spectrum sniffing and walk tests; tape measure (mm), digital level, camera.
 
-**Shared fixtures:** `tests/fixtures/packets_v1.json` (golden vectors, consumed by both C++ native tests and pytest), recorded NOAA responses (8531942 hilo, 8531680 observed and 6-min predicted, plus an outage and a malformed response), recorded Tempest responses.
+**Shared fixtures:** `tests/vectors/` (golden payload v1/v2 and sealed-frame vectors with a fixed test key, consumed by both C++ native tests and pytest; ARCHITECTURE v0.2 called this `tests/fixtures/packets_v1.json`), recorded NOAA responses (8531942 hilo, 8531680 observed and 6-min predicted, plus an outage and a malformed response), recorded Tempest responses.
 
 ---
 
@@ -52,13 +54,14 @@ Likewise on energy: break-even harvest at the 25 mAh/day design budget is roughl
 
 | ID | Area | Cases | Pass |
 |---|---|---|---|
-| FW-U1 | Payload v1 encode | All fields at min, max, zero; negative pitch, roll, temp; `pitch_sd` above 0.255 degree (the u16 widening); every flag bit set singly and all together | Bytes equal golden vectors; length 26; little-endian offsets per ARCHITECTURE 4.7 |
-| FW-U2 | CRC-16 | CRC-16/CCITT-FALSE check value for ASCII `123456789` is `0x29B1`; CRC covers bytes 0-23 | Matches; one flipped bit anywhere changes CRC |
+| FW-U1 | Payload v2 encode | All fields at min, max, zero; negative pitch, roll, temp, `ibat`, `tbat`; `pitch_sd` above 0.255 degree (the u16 widening); `tbat` sentinel `0x8000` with `tbat_error`; every flag bit set singly and all together | Bytes equal golden vectors; length 30; little-endian offsets per ARCHITECTURE 4.7 |
+| FW-U2 | CRC-16 | CRC-16/CCITT-FALSE check value for ASCII `123456789` is `0x29B1`; CRC covers bytes 0-27 | Matches; one flipped bit anywhere changes CRC |
+| FW-U11 | Frame and AEAD | Header layout (fmt, node_id, epoch, seq); nonce = node_id ‖ epoch ‖ seq ‖ zeros; ChaCha20-Poly1305 seal with the header as AAD; `epoch` increments on cold boot and on `seq` wrap, never per cycle | Sealed frames equal the golden vectors byte for byte, and Python `cryptography` opens them; a flipped bit in header, ciphertext or tag fails to open; no two vectors share a (key, nonce) |
 | FW-U3 | Decode/round trip | encode then decode, C++ output decoded by the Python codec and the reverse | Identical field values, via the shared vectors |
 | FW-U4 | Stats | Median and SD of 300 samples: constant, ramp, single outlier, all identical. **Even-count median rule** (300 is even) must be fixed in one place and the server test must agree | SD 0 for constant; outlier does not move median; rule documented |
 | FW-U5 | Quantization | pitch 0.001 degree LSB, saturation at +/-32.767 degree, temp 0.1 C | Clamp, never wrap |
 | FW-U6 | Battery state machine | Thresholds (3.15 / 3.05 V placeholders): intervals 5/15/60 min, flags `low_batt`, `critical_batt`, `reduced_interval`, `sensor_skipped`; hysteresis at the boundaries | Correct state and interval for each vbat step, both directions |
-| FW-U7 | Cold-charge CE rule (BQ25185: /CE HIGH = charging disabled) | Pure function: /CE HIGH (disable) when die temp < +1 C; /CE LOW (enable) when > +2 C; previous state held between +1 and +2 C; `cold_charge_inhibit` and CE-override bits; behavior at -40, 0.9, 1.0, 1.1, 1.9, 2.0, 2.1, 85 C, approached from both directions; sensor error with unknown temp | Fail-safe: unknown temperature means /CE HIGH (charging disabled) |
+| FW-U7 | Cold-charge CE rule (BQ25185: /CE HIGH = charging disabled) | Pure function of the **battery-thermistor** temperature (Nick, 2026-11-04): /CE HIGH (disable) when `tbat` < +1 C; /CE LOW (enable) when > +2 C; previous state held between +1 and +2 C; `cold_charge_inhibit` and CE-override bits; behavior at -40, 0.9, 1.0, 1.1, 1.9, 2.0, 2.1, 85 C, approached from both directions; thermistor open, shorted or out of range (`tbat_error`) | Fail-safe: unknown temperature means /CE HIGH (charging disabled); the SCL3300 die temperature is never used by the rule |
 | FW-U10 | Safety-timer CE pulse | Pure function of STAT history: continuous "charging" counted across wakes; at about 4 h a pulse (HIGH then LOW) is issued and the counter resets; counter resets on "not charging", done, or panel loss; no pulse while the cold rule holds /CE HIGH | Pulse at the configured time, never during cold inhibit; `chg` bit5 set on the cycle that pulses |
 | FW-U8 | Seq/boot counters | seq increments per frame, u16 wrap 65535 to 0; boot_count wrap; reboot flag only on first frame after reset | Matches vectors |
 | FW-U9 | Range flags | `out_of_range` at \|pitch\| > 15 or \|roll\| > 10 degree; `high_sd`; `short_sample`; `sensor_error` zeroing | As specified |
@@ -69,27 +72,27 @@ Run in this order. Each has its own pass criterion; a fail stops the line until 
 
 | ID | Test | Method | Pass / action |
 |---|---|---|---|
-| **B1** | **Spike S1: minimal MeshCore sender** | Node sends one GRP_DATA frame on a private channel and deep-sleeps; companion v1.17.1 gateway reports frame `0x1B` with the right bytes | Payload decodes with a good CRC; node returns to sleep without listening. If this fails, the architecture's premise fails; stop and re-plan. |
+| **B1** | **Spike S1: minimal LoRa sender** | Node sends one 54-byte encrypted frame on the private settings (RadioLib, CAD first) and deep-sleeps; the gateway receives and posts it; `tidesvc` opens it with the right bytes | Frame opens with a good tag and CRC; node returns to sleep without listening. If this fails, the architecture's premise fails; stop and re-plan. |
 | **B2** | **Sleep current** | Whole node as it will be installed (charger, INA3221 power-down, battery divider, Vext off), panel disconnected, dark, cell or 3.2 V supply, settle at least 60 s. Repeat at about +20 C and about 0 C | Target at most 50 uA (the `config.toml` default). Acceptable at most 100 uA. Above 100 uA: find the leaker (divider, charger quiescent, INA3221, Vext FET) before continuing. |
 | **B3** | **Awake charge per cycle and airtime** | Capture a full wake: init, sample, TX at the chosen SF/BW/power. Integrate mAs. Re-run with the final private-frequency settings and TX power | Target about 125 mAs (model). Acceptable at most 200 mAs. Hard limit about 280 mAs: at 288 cycles plus 100 uA sleep that exhausts the 25 mAh/day budget. Record `awake_ms` against `awake_ms_prev` reported in the packet (should agree within 5%). |
 | **B4** | **24 h energy run** | Node cycling normally on the bench with the current logger for 24 h (at least 288 cycles) | mAh/day within 10% of B2 + B3 prediction; at most 25 mAh/day. This is the value that goes into `config.toml` (`i_sleep_ua`, `awake_mas_per_cycle`) and the solar report. |
 | **B5** | **Noise** | Node fixed on the tilt rig at 0, about 3 and about 7 degree, 2 h each, normal 5-min cycling, cell-powered, no vibration. Then one run with a table tap or a fan nearby | SD of the per-cycle **median pitch** across cycles at most 0.01 degree (PRD NFR, about 1.3 mm). Per-burst `pitch_sd` reported separately. Disturbance run should raise `pitch_sd` and trip `high_sd` at the intended level without crashing. |
 | **B6** | **Scale, linearity, sign** | Tilt rig at 6 or more angles across 0-8 degree against a sine bar or reference digital level | Error at most 0.02 degree (reference limited). Sign convention and axis (pitch vs roll) confirmed so the install cannot be mounted swapped. |
-| **B7** | **Temperature drift** | Node (sensor and enclosure) on the rig at fixed angle in the freezer, then ambient, then +40 C, slow ramp (at most 1 C/min so die temp tracks air temp), at least 30 min soak at each of -15, 0, +20, +40 C, with a reference thermocouple. Fit `k_T` in degree per C | Residual drift after `k_T` correction at most 0.05 degree (about 6.6 mm) across -10 to +40 C. If raw drift is already within that, leave `k_T = 0`. Record the lag between die temp and air temp; the die temp is also used as the battery-temperature proxy. |
+| **B7** | **Temperature drift** | Node (sensor and enclosure) on the rig at fixed angle in the freezer, then ambient, then +40 C, slow ramp (at most 1 C/min so die temp tracks air temp), at least 30 min soak at each of -15, 0, +20, +40 C, with a reference thermocouple. Fit `k_T` in degree per C | Residual drift after `k_T` correction at most 0.05 degree (about 6.6 mm) across -10 to +40 C. If raw drift is already within that, leave `k_T = 0`. Record the lag between die temp and air temp (the die temp is used for `k_T` only; battery temperature comes from the cell thermistor). |
 | **B8** | **Brownout** | Bench supply with a series resistance matching the cell (cell internal resistance, cold value if measured), sweep 3.6 to 2.9 V while the node cycles, plus a TX-under-load check at each step. Repeat with the real cell at about 0 C if possible | Record the voltage where it first resets or fails to TX. Node must (a) enter `critical` / 60 min behavior above that voltage with at least 0.1 V margin, (b) never boot-loop, (c) set `brownout_reset` on the first frame after recovery. Adjust the 3.15 / 3.05 V thresholds to the measured knee. |
 | **B9** | **Cold charge inhibit (freezer)** | See below | See below |
-| **B10** | **Charger and telemetry accuracy** | Reference meter in series with panel input and cell. Panel emulation with a current-limited bench supply (6 V open circuit; limits 5, 10, 20, 50, 100 mA). Compare `ipanel`, `vpanel`, `vbat` against the reference. Integrate `ipanel` over a controlled charge of a part-discharged cell, with the node load running, and compare with the Ah actually accepted by the cell | `ipanel` within +/-5% or +/-1 mA (whichever is larger); `vbat` within +/-20 mV. **Harvest definition check:** the BQ25185 is linear with a power path (load served from SYS), so in sun `ipanel` ≈ load + charge. Pass if integrated `ipanel` minus the measured load charge is within +/-10% of cell-accepted charge (ARCHITECTURE 6.6). Also: panel Voc (measure in full sun) is below the BQ25185 input maximum (18 V operating) with margin. |
+| **B10** | **Charger and telemetry accuracy** | Reference meter in series with panel input and cell. Panel emulation with a current-limited bench supply (6 V open circuit; limits 5, 10, 20, 50, 100 mA). Compare `ipanel`, `vpanel`, `vbat` and `ibat` (both directions) against the reference. Integrate `ipanel` over a controlled charge of a part-discharged cell, with the node load running, and compare with the Ah actually accepted by the cell | `ipanel` and `ibat` within +/-5% or +/-1 mA (whichever is larger); `vbat` within +/-20 mV. Integrated (corrected) `ibat` within +/-10% of the reference cell charge. **Harvest definition check:** the BQ25185 is linear with a power path (load served from SYS), so in sun `ipanel` ≈ load + charge. Pass if integrated `ipanel` minus the measured load charge is within +/-10% of cell-accepted charge (ARCHITECTURE 6.6). Also: panel Voc (measure in full sun) is below the BQ25185 input maximum (18 V operating) with margin. |
 | B11 | Weak-light charging | Same emulation at 2, 5, 10 mA and at the lowest panel voltage the real panel gives in overcast | Charger starts and accepts current. Record the minimum input voltage/current at which charging starts. Feeds the inferred 0.5 W case in section 8. |
 | B12 | Enclosure | Assembled node, desiccant in, humidity indicator card inside; 30 min under 10 cm of water or a hose test; gland and drip-loop check; thermal cycle (freezer to warm room) twice | Card unchanged, no moisture. Re-check at the first desiccant swap. |
 | B13 | Safety timer and /CE fail-safe (BATTERY.md T3, T7) | Emulate 7 h of continuous weak sun (VINDPM) on a nearly full cell, with and without the firmware pulse. Then remove MCU power with the panel supply on | Without the pulse, charging latches off (STAT 0/0) at about 6 h; with the pulse about every 4 h, no latch. With the MCU unpowered, the 1 MΩ pull-up keeps charging disabled until the MCU boots from SYS and drives /CE LOW. |
 
-**B9 detail: cold charge inhibit.** This is both a safety item (charging LiFePO4 below 0 C damages the cell) and the largest unknown for the winter test. The cell is unprotected (no protected LiFePO4 cell was found, BATTERY.md 2.2), so use the 1 A fuse and a current-limited supply on the panel input. Design (Nick, 2026-10-10): **firmware owns the 0 C rule** (disable below +1 C, enable above +2 C); the charger NTC (B3435 with 130 kΩ in parallel) is a **hardware backstop at about -3 C** (resume about +2.4 C).
+**B9 detail: cold charge inhibit.** This is both a safety item (charging LiFePO4 below 0 C damages the cell) and the largest unknown for the winter test. The cell is unprotected (no protected LiFePO4 cell was found, BATTERY.md 2.2), so use the 1 A fuse and a current-limited supply on the panel input. Design (Nick, 2026-10-10): **firmware owns the 0 C rule** on a **second thermistor on the battery**, read by the MCU (disable below +1 C, enable above +2 C; Nick 2026-11-04); the charger NTC (B3435 with 130 kΩ in parallel) is a **hardware backstop at about -3 C** (resume about +2.4 C).
 1. Cell at about 20 C: confirm charging starts with the supply connected (`chg` bit0, battery current positive). This is the control.
-2. Put the node, cell and NTC in the freezer (about -18 C) until the NTC and the die temp read below -5 C. Apply the supply. Expect no charge current, `cold_charge_inhibit` set, and `vpanel` present. Confirm the node keeps running from the panel through SYS.
-3. Test the **firmware** rule alone (NTC replaced by a fixed 10 kΩ, so the charger always sees 25 C): charging stops when die temp falls below +1 C and restarts above +2 C. Test the **hardware** backstop alone (firmware CE rule disabled in a test build): charging stops at about -3 C falling (record the value) and restarts at about +2.4 C rising (record the value).
+2. Put the node, cell and both NTCs in the freezer (about -18 C) until the battery thermistor reads below -5 C. Apply the supply. Expect no charge current, `cold_charge_inhibit` set, and `vpanel` present. Confirm the node keeps running from the panel through SYS.
+3. Test the **firmware** rule alone (NTC replaced by a fixed 10 kΩ, so the charger always sees 25 C): charging stops when the battery thermistor falls below +1 C and restarts above +2 C. Test the **hardware** backstop alone (firmware CE rule disabled in a test build): charging stops at about -3 C falling (record the value) and restarts at about +2.4 C rising (record the value).
 4. Warm slowly with both layers active. Record the cell temperature at which charging resumes. Confirm no oscillation (rapid on/off) near either threshold.
-5. Verify the NTC is physically on the cell, not just in the box (cell temperature lags and is colder than air in a shaded ramp). Record the offset between die temperature and cell (NTC/thermocouple) temperature during cool-down, since the firmware rule uses die temperature.
-Pass: with both layers active, zero charge current at cell temperature below 0 C; the firmware rule alone stops charging above 0 C cell temperature (the +1 C threshold minus the measured die-to-cell offset must stay above 0 C); the hardware backstop alone stops charging at or above about -4 C; inhibit logged distinctly from "no sun" in the packet. Fail on any measurable charge current at cell temperature below 0 C with both layers active.
+5. Verify both NTCs are physically on the cell, not just in the box (cell temperature lags and is colder than air in a shaded ramp). Record the error between the battery-thermistor reading and a thermocouple on the cell during cool-down. Also open and short the thermistor: charging must be disabled and `tbat_error` set.
+Pass: with both layers active, zero charge current at cell temperature below 0 C; the firmware rule alone stops charging above 0 C cell temperature (the +1 C threshold minus the measured thermistor error must stay above 0 C); the hardware backstop alone stops charging at or above about -4 C; inhibit logged distinctly from "no sun" in the packet. Fail on any measurable charge current at cell temperature below 0 C with both layers active.
 **Safety:** never connect USB to the Heltec while the LiFePO4 cell is attached (the onboard charger is a 4.2 V Li-ion charger). Test builds are programmed with the cell disconnected, and the enclosure label is part of acceptance.
 
 **Note on the charger:** B9, B10 and B13 are charger-specific. The charger is settled as the TI BQ25185 on Adafruit 6091 (BATTERY.md; BOM and ARCHITECTURE v0.2 agree). Its TH pad is broken out. BATTERY.md section 9 (T1-T10) holds the detailed bench procedures; this plan's B-tests are the acceptance view of them.
@@ -105,12 +108,13 @@ All of this runs in CI-less pytest on the dev machine, with a frozen clock and r
 | ID | Case | Pass |
 |---|---|---|
 | SV-D1 | Golden vectors (shared with FW-U1) | Fields exact |
-| SV-D2 | Bad CRC; wrong `ver`; wrong channel; wrong data type; length 25 and 27 | Raw frame stored with `parse_status` set; no `readings` row; not counted as a valid reading |
-| SV-D3 | De-dup on `(node_id, boot_count, seq)`, including the same frame arriving direct and via the repeater | One reading; duplicate counted in link stats |
+| SV-D2 | Bad tag; bad CRC; wrong `ver`; wrong `fmt`; header/payload `node_id` or `seq` mismatch; frame length 53 and 55 | Raw frame stored with `parse_status` set; no `readings` row; not counted as a valid reading |
+| SV-D3 | De-dup on `(node_id, epoch, seq)`, including the same batch posted twice (gateway retry) and `tx_repeats = 1`; a frame from an older epoch | One reading; duplicate counted in link stats; older-epoch frame rejected as a replay |
 | SV-D4 | Seq wrap (65535 to 0), boot_count increment with seq reset, gap of N frames | Loss counted correctly; no negative or huge gap on a reboot |
-| SV-D5 | Backlog drain (several frames in seconds, as the companion's 16-frame queue does) | Timestamps back-filled per ADR-012, `time_source = backfilled`, excluded from live "current" but kept |
+| SV-D5 | Queued frames (a batch after a mini PC outage, `age_ms` up to hours, as the gateway's 288-frame queue delivers) | `t = rx_at - age_ms` per ADR-012, `time_source = queued`, excluded from live "current" but kept; time error within 5 s |
 | SV-D6 | Raw first | A frame that fails to parse is still in `packets_raw` |
-| SV-D7 | Fake companion over a pty: unplug and replug, reconnect backoff | API stays up, gateway status `error` then `ok`; no crash |
+| SV-D7 | Fake gateway stops heartbeats, then resumes | API stays up, gateway status `ok` → `error` (3 min) → `ok`; `GATEWAY_DOWN` at 5 min; no crash |
+| SV-D8 | Ingest auth and robustness | Missing or wrong token: 401, nothing stored; malformed JSON: 400; writer unavailable: 503 and the batch is safe to retry; unknown `gateway_id` rejected |
 
 ### 4.2 Conversion and calibration math
 
@@ -154,7 +158,8 @@ One table-driven test per row of ARCHITECTURE 6.8: open condition, clear conditi
 
 Specific cases for the v0.2 rules:
 - `ENERGY_NEGATIVE_STREAK` (early warning): 6 vs 7 consecutive negative-net days; a low-coverage day inside the streak (skipped, neither extends nor breaks it); clears on the first qualifying non-negative day; the email is marked early warning; it never changes the 14-day verdict or opens `ENERGY_DEFICIT` by itself.
-- `REPEATER_SILENT`: relayed frames (`path_len >= 1`) keep the repeater `ok` without adverts; adverts alone keep it `ok`; silence for `silent_after_s` opens it; it is suppressed while `GATEWAY_DOWN` is open; the email says "check the repeater first" when the node is also silent.
+- `NODE_SILENT` opens at 30 min with no valid reading (Nick, 2026-11-04), not at 15 (the 15-min mark is only the API's stale state, SV-A1).
+- `GATEWAY_DOWN`: heartbeats keep it closed; 5 min without a heartbeat opens it; the email says "check the gateway, its power and Wi-Fi first" when the node is also silent. (`REPEATER_SILENT` no longer exists.)
 
 ### 4.6 API: stale, errors, and no demo fallback
 
@@ -165,10 +170,10 @@ This is the hard requirement from FR5 and CLAUDE.md. Test it as a property, not 
 | SV-A1 | `/level/current` at 14:59 and 15:01 since the last valid reading (stale after 900 s) | 200 `ok` then 503 `stale` |
 | SV-A2 | 503 body: `level_m`, `residual_m` null; `last_good` present, labelled, with its own timestamp; `predicted_m` present but labelled as prediction | Exactly as ARCHITECTURE 7.3 |
 | SV-A3 | **Fresh database** (no readings, no calibration, no predictions) | 503 with null observed fields and no `last_good`; no zeros, no placeholder |
-| SV-A4 | **Property test:** for every combination of component states (gateway ok/error, node ok/stale/silent, NOAA ok/error/uncovered, calibration present/absent, Tempest ok/disabled/error), no observed field ever equals a predicted value, a default, or a value from an invalid reading | Holds for all combinations |
+| SV-A4 | **Property test:** for every combination of component states (gateway ok/error/unknown, node ok/stale/silent, NOAA ok/error/uncovered, calibration present/absent, Tempest ok/disabled/error), no observed field ever equals a predicted value, a default, or a value from an invalid reading | Holds for all combinations |
 | SV-A5 | Invalid readings (`out_of_range`, high SD, sensor error, backfilled) | Excluded from `/level/current`; shown as `valid: false` with a reason in history |
-| SV-A6 | Gateway link lost while node healthy | `GATEWAY_DOWN`, component status distinct from node `stale` |
-| SV-A11 | Repeater silent while gateway ok (fake companion stops relayed frames and adverts) | `/api/v1/status` shows repeater `silent` and overall `degraded`; `/node/health` repeater block present; distinct from node `stale` and gateway `error` |
+| SV-A6 | Gateway heartbeats lost while node healthy | `GATEWAY_DOWN`, component status distinct from node `stale` |
+| SV-A11 | Gateway ok but no frames (fake gateway sends heartbeats only) | `/api/v1/status` gateway `ok`, node `stale`; `/node/health` gateway block shows the heartbeat counters; distinct from gateway `error` |
 | SV-A7 | Tempest disabled, 401, timeout, missing fields, stale obs | Core endpoints byte-identical (excluding the weather block); fields null with a reason, never defaults |
 | SV-A8 | Composite and history endpoints during the same faults | 200 with per-component `status`; `/healthz` 200 while the process is up |
 | SV-A9 | CSV export during an outage day | Gaps are empty cells with a reason, not filled |
@@ -178,7 +183,7 @@ This is the hard requirement from FR5 and CLAUDE.md. Test it as a property, not 
 
 ## 5. RF link tests
 
-Prerequisite: Q1 is answered with **Nick's solar PVC-tube repeater bridging the ramp to the gateway** (node in **flood** mode, ADR-003 v0.2), and Q2 with a **private frequency and encrypted channel**, set identically on node, repeater and gateway. **Acceptance is stated as margin over the demodulation floor of the chosen SF, per hop** (approx. -7.5, -10, -12.5, -15 dB for SF7, 8, 9, 10 at the usual bandwidths; ARCHITECTURE 5.4): median SNR at least 10 dB above the floor, or at least 10 dB fade margin by the attenuator test. The gateway's reported SNR covers only the repeater → gateway hop; the node → repeater hop is proved by RF-3. The repeater's own power budget is not tested here (outside this project).
+Prerequisite: the link is **direct LoRa point-to-point from the node to the Wi-Fi gateway**, with no repeater (Nick, 2026-11-04; ADR-003 v0.3), on a **private frequency with encrypted frames**, set identically on node and gateway. The gateway spot comes from the site visit (DEV-PLAN E0.1, E4.3). **Acceptance is stated as margin over the demodulation floor of the chosen SF** (approx. -7.5, -10, -12.5, -15 dB for SF7, 8, 9, 10 at BW125; ARCHITECTURE 5.4): median SNR at least 10 dB above the floor, or at least 10 dB fade margin by the attenuator test. With one hop, the gateway's per-frame SNR measures the whole link. The link budget in ARCHITECTURE 2.4 is all assumptions, so these tests are where it is confirmed or refuted.
 
 **Counting delivery.** Two independent measures, and both must be reported.
 - Seq-based: `received_unique / (seq_max - seq_min + 1)` within a boot, handling wrap and boot_count. This misses loss across a reboot and at the ends.
@@ -191,10 +196,10 @@ Reduce the expected count in periods when the node was legitimately in 15-min or
 | RF-2 | Bench link | Node 1-3 m from gateway, final settings, 1 h | 100% delivery; SNR/RSSI baseline recorded |
 | RF-3 | **Fade margin** | Final antennas and geometry; insert a 10 dB attenuator in the node antenna feed (20 dB for a stretch test); 24 h | At least 95% delivery with 10 dB inserted. This directly proves 10 dB of margin without needing SNR statistics. |
 | RF-4 | **Range test, node leg** | Node temporarily clamped (not bonded) at the final position and antenna height, final TX power; 48 h or longer, spanning at least one high and one low tide | At least 95% delivery overall and at least 85% in the worst rolling 6-hour window (tide-correlated fades, boats, people). Per PRD this is done before anything is bonded. |
-| RF-5 | **Repeater hop** | Node, repeater, gateway in final positions; node in flood mode (ADR-003 default; zero-hop is not relayed; confirm the exact MeshCore behavior in S1). 48 h | End-to-end at least 95% delivery; `path_len` 1 where expected; repeater → gateway median SNR at least 10 dB above the chosen SF floor; duplicates from direct and relayed copies de-duplicated (SV-D3) |
-| RF-6 | Repeater power-saving | Repeat RF-5 with the repeater's `powersaving` mode on and off | No significant drop with it on. Light-sleep can miss a short preamble; if it does, record it for Nick (the repeater's power budget is his separate concern) |
-| RF-7 | Repeater/gateway fault visibility | Power the repeater off for longer than `silent_after_s` (default 4 h); then unplug the gateway for 30 min; then reboot the mini PC | `/level/current` goes 503 at 15 min; `NODE_SILENT` at 30 min; repeater status `silent` and `REPEATER_SILENT` open once `silent_after_s` passes (ARCHITECTURE 5.5); gateway `ok` vs `error` as documented. If the advert/status path in E5.9 turned out unworkable, record that the repeater is visible only through relayed frames, and keep the runbook line "node silent and repeater silent: check the repeater first". |
-| RF-8 | Repeat at final settings after any change of SF, TX power, antenna, or repeater position | As RF-4 | Same criteria |
+| RF-5 | **Gateway placement** (DEV-PLAN E4.3) | Walk test before RF-4: node held at the ramp antenna position, gateway at the candidate spot(s); RSSI/SNR recorded at high and low tide, at SF7 and SF9 | Median SNR at least 10 dB above the chosen SF floor at the chosen spot; measured path loss recorded against ARCHITECTURE 2.4's assumed losses (ramp shadowing, window) |
+| RF-6 | Fallback ladder (only if RF-4/RF-5 fail) | Try in order, one at a time: higher SF on both radios (up to SF10), gateway antenna outside or higher, gateway moved closer, `tx_repeats = 1` | Each step's delivery and SNR recorded; the first step that meets RF-4 is adopted and the energy budget re-checked (ARCHITECTURE 2.3). If none does, the relay question goes to Nick |
+| RF-7 | Gateway and network fault visibility | Power the gateway off for 30 min; then drop its Wi-Fi for 30 min (gateway up, queueing); then reboot the mini PC | Gateway off: `GATEWAY_DOWN` at 5 min, then `NODE_SILENT` at 30 min with "check the gateway first"; frames from that window are lost (radio not listening). Wi-Fi drop or mini PC reboot: no frames lost, because the gateway's queue delivers them on recovery, marked `queued` with correct times; `/level/current` 503 during the gap |
+| RF-8 | Repeat at final settings after any change of SF, TX power, antenna, or gateway position | As RF-4 | Same criteria |
 
 ---
 
@@ -202,14 +207,14 @@ Reduce the expected count in periods when the node was legitimately in 15-min or
 
 | Stage | Duration | Setup | Pass |
 |---|---|---|---|
-| **Soak A: bench** | 72 h minimum | Real node, real gateway, real `tidesvc` on the mini PC (or a staging copy), node on a tilt rig that is moved by hand twice daily through a tide-like sequence, NOAA live, SMTP live, repeater in the path | No unplanned `tidesvc` restart; no memory growth beyond the 256 MB limit; DB and CSV rows consistent with packets received; delivery at least 95% |
+| **Soak A: bench** | 72 h minimum | Real node, real gateway, real `tidesvc` on the mini PC (or a staging copy), node on a tilt rig that is moved by hand twice daily through a tide-like sequence, NOAA live, SMTP live, gateway on the Wi-Fi posting to `tidesvc` | No unplanned `tidesvc` restart; no memory growth beyond the 256 MB limit; DB and CSV rows consistent with packets received; delivery at least 95% |
 | **Soak B: installed shakedown** | 14 days (the PRD shakedown) | Installed and calibrated per section 7 | PRD section 7 metrics 2 and 3 (calm-day hi/lo within +/-15 min and +/-5 cm; at least 95% delivery) |
 
 **Fault injection during Soak A or B** (one at a time, each with the expected visible behavior and recovery):
 1. Block NOAA at the firewall for 1 h, then for longer than cache coverage.
-2. Unplug the gateway USB, replug (udev symlink, hot-plug).
+2. Power-cycle the gateway; then block its Wi-Fi for 1 h (queue holds frames, delivered on recovery).
 3. Power-cycle the node (expect `reboot` flag, `boot_count` increment, no phantom level).
-4. Reboot the mini PC (service autostarts, backlog drained from the companion's queue, time back-filled).
+4. Reboot the mini PC (service autostarts; the gateway's queued frames arrive with `age_ms` and correct times).
 5. Force a real email: temporarily set `surge_warning_m` low in config, confirm one email with its clear condition and the context lines, restore the config.
 6. Leave the node covered for 3 days to see the battery-state ladder and recovery (bench only).
 7. Cross DST (2026-11-01) with the service running.
@@ -280,10 +285,10 @@ The first automatic monthly refit (1st of the month, 03:00 local) must be observ
 
 ### 8.1 What to log
 
-**Already in the v1 payload and the energy module (per 5-min cycle):** `vbat`, `vpanel`, `ipanel`, `chg` bits (CHRG, DONE, cold inhibit, CE override), die `temp`, `awake_ms_prev`, `flags`, `seq`, `boot_count`. Server computes `energy_daily` (harvest mAh/mWh, consumption estimate, net, coverage, reached full, cold-inhibit hours, resting voltage, minimum temperature).
+**Already in the v2 payload and the energy module (per 5-min cycle):** `vbat`, `vpanel`, `ipanel`, `ibat` (cell current, Nick 2026-11-04), `tbat` (battery thermistor), `chg` bits (CHRG, DONE, cold inhibit, CE override), die `temp`, `awake_ms_prev`, `flags`, `seq`, `boot_count`. Server computes `energy_daily` (harvest mAh/mWh, consumption estimate, net, measured net from `ibat`, coverage, reached full, cold-inhibit hours, resting voltage, minimum temperature).
 
 **Additional records (small, mostly manual, recommended):**
-- The B4 measured sleep/awake constants and the capacity actually fitted (26650, about 3300 mAh rated; Q7 resolved), recorded in the dated config.
+- The B4 measured sleep/awake constants and the capacity actually fitted (26650; 3200 mAh planning value, from the cell label on arrival), recorded in the dated config.
 - Site shading survey and a **reference reading**: panel short-circuit current and open-circuit voltage by multimeter at noon on a clear day, monthly, with the panel unshaded, plus the same on an unshaded vertical south surface elsewhere (for example, a house wall). This separates "low sun" from "local shading".
 - Optional, and not currently in the architecture: Tempest solar radiation / illuminance to weight clear versus overcast days. **[unverified]** that the REST observation exposes it as used by `tempest.py`.
 - A human event log: battery swaps, enclosure opened, panel cleaned, bird fouling, snow or ice cover, anything that interrupts or biases the data.
@@ -297,7 +302,7 @@ For each local day *d* with `coverage_pct` of at least 80%:
 |---|---|
 | Harvest H_d | Integrated `ipanel` (mAh), charger-accepted (B10 confirms this equals cell charge within 10%) |
 | Consumption C_d | Measured constants from B4 (not the 125 mAs / 50 uA placeholders) times the logged awake time |
-| Net N_d | H_d - C_d |
+| Net N_d | H_d - C_d; cross-checked against the integrated, corrected `ibat` (a persistent gap above 10% means the consumption model or harvest definition needs review) |
 | Energy ratio R_14 | Sum(H)/Sum(C) over a rolling 14-day window (matches the architecture verdict: at least 2 surplus, 1-2 marginal, under 1 deficit) |
 | Worst-week net W_7 | Minimum over all 7-day windows of Sum(N) |
 | Replay SoC | Start at 100%; each day add N_d, clamp to [0, capacity]; re-anchor to 100% on every DONE day. Report the minimum and its date |
@@ -340,10 +345,10 @@ The 0.5 W case is **inferred from the 1 W log, not measured**: H_d x 0.5 on non-
 
 | # | Item | Why first | Gate it unlocks |
 |---|---|---|---|
-| 1 | **B1** S1 spike (MeshCore sender plus deep sleep) | If it fails the whole design is wrong, and it costs a day | Everything |
+| 1 | **B1** S1 spike (RadioLib sender plus deep sleep, frame opened end to end) | If it fails the whole design is wrong, and it costs a day | Everything |
 | 2 | **B9** cold charge inhibit; **B10** telemetry/harvest accounting | Can damage the cell; and the headline measurement is meaningless if `ipanel` is not what the model assumes | Cell goes outdoors; winter test is valid |
 | 3 | **B2, B3, B4** sleep, awake, 24 h energy | The 25 mAh/day budget and every solar number rest on these | Constants in config |
-| 4 | **RF-3, RF-4, RF-5** fade margin, range, repeater | No link, no data; checked before bonding | Install may proceed |
+| 4 | **RF-5, RF-3, RF-4** gateway placement, fade margin, range (single hop, no repeater: the main RF risk) | No link, no data; checked before bonding | Install may proceed |
 | 5 | **FW-U1 to U3, SV-D, SV-A** codec and no-demo/stale behavior | Cheap, deterministic, and the explicit non-negotiable | Server goes live |
 | 6 | **B8** brownout, **B5-B7** noise, scale, drift | Prevents silent bad data and boot loops; sensor effects are small vs the +/-5 cm budget | Firmware freeze |
 | 7 | **SV-C, SV-N, SV-E, alerts** | Correctness of calibration and residual | Calibration at install |
@@ -353,7 +358,7 @@ The 0.5 W case is **inferred from the 1 W log, not measured**: H_d x 0.5 on non-
 
 **Phase gates (mapped to PRD section 9):**
 - Phase 1 exit: B1-B13 pass; FW-U and SV-D/SV-A pass.
-- Phase 2 exit: RF-3 to RF-6 pass at final positions.
+- Phase 2 exit: RF-3 to RF-5 pass at final positions (RF-6 only if needed).
 - Phase 3 exit: section 7.3 calibration acceptance and section 7.4 shakedown acceptance.
 - Phase 4 exit: section 8 verdict recorded (PASS, MARGINAL, FAIL or INCONCLUSIVE with reasons) and the runbook used once.
 
@@ -369,11 +374,11 @@ Copy into `docs/bench/` per run. Record date, firmware commit, board ID, cell ID
 - [ ] Panel Voc measured in sun, below the charger input rating with margin
 
 **Firmware (host)**
-- [ ] FW-U1 to FW-U10 pass; golden vectors identical in C++ and Python
+- [ ] FW-U1 to FW-U11 pass; golden vectors (payloads and sealed frames) identical in C++ and Python
 - [ ] Even-count median rule fixed and documented
 
 **Hardware**
-- [ ] B1 S1 spike: frame decodes, node sleeps, no listening
+- [ ] B1 S1 spike: frame opens and decodes, node sleeps, no listening
 - [ ] B2 sleep current: ___ uA (target 50, max 100)
 - [ ] B3 awake charge: ___ mAs/cycle (target 125, max 200); TX power ___ dBm; SF/BW ___
 - [ ] B4 24 h run: ___ mAh/day (max 25); constants written to `config.toml`
@@ -381,8 +386,8 @@ Copy into `docs/bench/` per run. Record date, firmware commit, board ID, cell ID
 - [ ] B6 scale: max error ___ degree (max 0.02); sign and axis confirmed
 - [ ] B7 drift: ___ degree over -10 to +40 C after correction (max 0.05); `k_T` ___
 - [ ] B8 brownout: first reset at ___ V; `critical` threshold margin at least 0.1 V; recovery clean
-- [ ] B9 cold inhibit: zero charge below 0 C with both layers; firmware alone stops at +1 C die (die-to-cell offset ___ C); hardware alone stops at ___ C (expect about -3) and resumes at ___ C (expect about +2.4); no chatter
-- [ ] B10 `ipanel` within +/-5% or 1 mA; `ipanel` minus load within 10% of cell-accepted charge
+- [ ] B9 cold inhibit: zero charge below 0 C with both layers; firmware alone stops at +1 C on the battery thermistor (thermistor error vs thermocouple ___ C; open/short → `tbat_error`, charging off); hardware alone stops at ___ C (expect about -3) and resumes at ___ C (expect about +2.4); no chatter
+- [ ] B10 `ipanel` and `ibat` within +/-5% or 1 mA; `ipanel` minus load within 10% of cell-accepted charge; integrated `ibat` within 10%
 - [ ] B13 safety timer: latch at 6 h without pulse, none with pulse; /CE fail-safe holds charging off with MCU unpowered
 - [ ] B11 charger starts at 2/5/10 mA; min input ___ V
 - [ ] B12 enclosure leak test and humidity card clean
@@ -391,9 +396,9 @@ Copy into `docs/bench/` per run. Record date, firmware commit, board ID, cell ID
 - [ ] RF-1 frequency chosen from the noise survey; SF/BW chosen
 - [ ] RF-3 delivery with 10 dB pad: ___ % (min 95)
 - [ ] RF-4 48 h range test: ___ % overall, worst 6 h ___ % (min 95 / 85)
-- [ ] RF-5 repeater hop: ___ %; duplicates de-duplicated
-- [ ] RF-6 repeater power-saving on vs off: ___
-- [ ] RF-7 outage visibility: `REPEATER_SILENT` distinct from `NODE_SILENT` and `GATEWAY_DOWN`; runbook line
+- [ ] RF-5 gateway placement: spot ___, distance ___ m, median SNR ___ dB at SF ___; measured vs assumed loss ___
+- [ ] RF-6 fallback ladder (if needed): step adopted ___
+- [ ] RF-7 outage visibility: `GATEWAY_DOWN` distinct from `NODE_SILENT`; queued frames recovered after a Wi-Fi drop; runbook line
 
 **Server and soak**
 - [ ] SV-A4 property test passes; fresh-DB 503 test passes
@@ -414,13 +419,13 @@ Copy into `docs/bench/` per run. Record date, firmware commit, board ID, cell ID
 Open items are now tracked in one place: `docs/DEV-PLAN.md` section 7. Status of the v0.1 flags:
 
 1. **Alert rule mismatch:** resolved (Nick, 2026-10-10). `ENERGY_DEFICIT` on the 14-day verdict is the official answer; 7 consecutive negative days is the `ENERGY_NEGATIVE_STREAK` early warning. Both are tested (section 4.5).
-2. **BOM missing parts:** resolved. BOM v0.2 has the INA3221 and Nick's repeater (as an already-owned/planned item).
+2. **BOM missing parts:** resolved. BOM v0.2 added the INA3221; BOM v0.3 removes the repeater and adds the Wi-Fi gateway and the battery thermistor.
 3. **Charger not settled:** resolved. BQ25185 on Adafruit 6091 (TH pad broken out). It is linear with a power path; B10's harvest check is restated accordingly.
-4. **Zero-hop vs repeater:** resolved. Flood is the ADR-003 default; the margin criterion is restated per hop for the private SF/BW (section 5).
-5. **Repeater with no telemetry:** resolved for liveness (ARCHITECTURE 5.5, `REPEATER_SILENT`, RF-7, SV-A11). Its power budget is out of scope (Nick). Whether the advert/status path works in `meshcore_py` is open (DEV-PLAN 7, item 11).
+4. **Zero-hop vs repeater:** superseded 2026-11-04. No repeater; single-hop point-to-point, margin criterion per section 5. The direct link budget is unconfirmed (DEV-PLAN 7, items 15 and 17).
+5. **Repeater with no telemetry:** superseded 2026-11-04 (no repeater). Gateway health comes from its heartbeat (RF-7, SV-D7, SV-A6/A11).
 6. **Flexible amorphous panel (Q6):** still open: measure Voc, expect a lower derate factor than modelled (DEV-PLAN 7, item 4).
-7. **Cell size (Q7):** resolved: 26650, about 3300 mAh rated; physical fit still to verify.
-8. **Spec gaps:** matched-extremes minimum (SV-C7) and even-count median rule (FW-U4) are still open (DEV-PLAN 7, items 6-7). The harvest definition (B10) is settled for the BQ25185; whether to add a cell-current field to the payload is open (DEV-PLAN 7, item 8).
+7. **Cell size (Q7):** resolved: 26650, planned at 3200 mAh (Nick, 2026-11-04; verify the label); physical fit still to verify (Nick's bench to-do).
+8. **Spec gaps:** matched-extremes minimum (SV-C7) and even-count median rule (FW-U4) are still open (DEV-PLAN 7, items 6-7). The harvest definition (B10) is settled for the BQ25185; the cell-current field is decided and added (`ibat`, payload v2).
 9. **WisBlock prototype option** (BOM): kept as a prototype path only; it would need an nRF52 port of the firmware (unverified). If used, B7 temperature drift becomes mandatory and likely large; the rest of the plan carries over.
 10. **Not verified by this plan:** NOAA's own accuracy at 8531942 (subordinate station) bounds how well hi/lo comparison can ever look. Tempest station 183092's exposure relative to the ramp is unstated.
 
@@ -432,3 +437,4 @@ Open items are now tracked in one place: `docs/DEV-PLAN.md` section 7. Status of
 |---|---|---|---|
 | 0.1 | 2026-10-10 | qa-strategy agent | Initial draft from PRD v0.2, ARCHITECTURE v0.1 plus answers log, and BOM |
 | 0.2 | 2026-10-10 | software-architecture agent (doc reconciliation) | Aligned with Nick's decisions: BQ25185 /CE polarity and cold layering (FW-U7, B9), safety-timer pulse (FW-U10, B13), power-path harvest check (B10), flood/per-hop RF criteria, repeater health (RF-7, SV-A11), new alert cases; section 11 statuses. |
+| 0.3 | 2026-11-04 | software-architecture agent (doc reconciliation) | Nick's 2026-11-04 decisions: repeater removed, single-hop RF tests (RF-5 to RF-7 rewritten), gateway ingest and heartbeat tests (SV-D2/D3/D5/D7/D8, SV-A6/A11), battery-thermistor cold rule (FW-U7, B9), payload v2 with `ibat`/`tbat` (FW-U1/U2, B10, 8.1), FW-U11 frame/AEAD, `NODE_SILENT` 30 min, 3200 mAh. |

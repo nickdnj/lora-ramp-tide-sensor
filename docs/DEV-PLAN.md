@@ -1,11 +1,13 @@
 # Development Plan: LoRa Ramp Tide Sensor
 
-**Version:** 0.2 (draft)
-**Last Updated:** 2026-10-10
+**Version:** 0.3 (draft)
+**Last Updated:** 2026-11-04
 **Author:** Nick DeMarco, with AI assistance (dev-planning agent)
 **Status:** Draft, for Nick's review. **No GitHub repo or issues exist yet.** Section 6 holds the issue list in a form that can be created once Nick approves a repo.
-**Inputs:** `docs/PRD.md` v0.3, `docs/ARCHITECTURE.md` v0.2 plus Nick's answers log, `docs/BATTERY.md` v0.2, `docs/BOM.md` v0.2, `workspace/research/SPEC.md`
-**Not duplicated here:** battery chemistry, cell, and charger research lives in `docs/BATTERY.md` (v0.2, decisions recorded). Stories in the power system epic *consume* its output; they do not redo it.
+**Inputs:** `docs/PRD.md` v0.4, `docs/ARCHITECTURE.md` v0.3 plus Nick's answers log, `docs/BATTERY.md` v0.3, `docs/BOM.md` v0.3, `workspace/research/SPEC.md`
+**Not duplicated here:** battery chemistry, cell, and charger research lives in `docs/BATTERY.md` (v0.3, decisions recorded). Stories in the power system epic *consume* its output; they do not redo it.
+
+**Changes in v0.3 (2026-11-04):** applied Nick's 2026-11-04 decisions. The repeater is taken down, and the node sends LoRa point-to-point to a Wi-Fi gateway that posts to `tidesvc` on :8120. MeshCore is dropped (ARCHITECTURE 2.1, pending Nick's confirmation). Rewritten: E1.1 (spike S1 on RadioLib), E4.1 (gateway firmware, now size 5), E4.2, E4.3 (gateway placement and direct-link check, replacing the repeater story), E4.4, E5.3 (HTTP ingest), E5.4 (fake gateway), E5.8. **E5.9 (repeater health) dropped.** E3.3/E3.4/E3.5 updated for the battery thermistor, payload v2 with `ibat`/`tbat`, and the frame/AEAD key. E5.7/E13.2: backup to a Google Drive folder. E8.3: `NODE_SILENT` at 30 min decided, `REPEATER_SILENT` removed. Section 7 items 1, 2, 3, 8, 9 and 11 closed; new items added. **The GitHub issues created on 2026-10-10 still carry the v0.2 text for the stories above and need editing (E5.9 closing); that was not done in this pass.**
 
 **Changes in v0.2 (2026-10-10):** applied Nick's decisions. E0.2 and E2.1 charger/cell items resolved (BQ25185, 26650). E0.3 doc updates done (repeater is Nick's existing PVC-tube design). E1.6, E3.3 and E2.2 corrected for BQ25185 /CE polarity (HIGH = disabled, pull-up), 130 kΩ NTC shift, firmware 0 °C rule and the 4 h CE pulse. E4.3 and E4.4 restated for flood routing, matched private settings and per-hop margin; the repeater's own power budget dropped from scope. New story E5.9 (repeater health). E8.3: energy alert decided (14-day verdict official, 7-day early warning) and `REPEATER_SILENT` added. Section 7 is now the single list of open items, including the TEST-PLAN spec gaps.
 
@@ -13,7 +15,7 @@
 
 ## 1. Shape of the project
 
-One node, one gateway, one repeater, one Python service, one owner (Nick). Hobby pace: evenings and weekends, no sprints. Work is organized as **epics in phases**; stories inside a phase are ordered, and the phase exit is a testable gate. Milestones in the issue list map one-to-one to phases.
+One node, one Wi-Fi gateway (no repeater), one Python service, one owner (Nick). Hobby pace: evenings and weekends, no sprints. Work is organized as **epics in phases**; stories inside a phase are ordered, and the phase exit is a testable gate. Milestones in the issue list map one-to-one to phases.
 
 **Sizing.** Points use the dev-planning scale: 1 trivial, 2 small, 3 medium, 5 large, 8 should be split. Rough hobby conversion: **1 point is about one focused evening**. Total is about **175 points**, which is a rough estimate: Phase 1 numbers are the most solid, the winter phases are checkpoints that depend on the calendar rather than effort.
 
@@ -22,8 +24,8 @@ One node, one gateway, one repeater, one Python service, one owner (Nick). Hobby
 ### Critical path
 
 ```
-0.2 decisions -> 0.3 order parts -> 1.1 S1 spike -> 1.2/1.3/1.6 bench power
-  -> 2.2 power path -> 3.x firmware -> 4.3 repeater -> 4.4 link test -> 10.2 install
+0.1 site (gateway spot) + 0.2 decisions -> 0.4 order parts -> 1.1 S1 spike -> 1.2/1.3/1.6 bench power
+  -> 2.2 power path -> 3.x firmware -> 4.1 gateway firmware -> 4.3 gateway placement -> 4.4 link test -> 10.2 install
 parallel: 5.1-5.3 raw capture on the mini PC (must be live at install)
 ```
 
@@ -36,7 +38,7 @@ parallel: 5.1-5.3 raw capture on the mini PC (must be live at install)
 | **P0 Site and decisions** | 0 | E0 | L, hinge, stringer, shading recorded; radio settings, cell size, and parts list decided; Nick has approved the order |
 | **P1 Bench** | 1 | E1, E2 | S1 passes; sleep and awake current measured and inside the 25 mAh/day design budget; LiFePO4 brownout point known; tilt noise at or below 0.01 deg; charger cold cutoff observed |
 | **P2 Build** | 1-2 | E3, E4 (4.1-4.3), E5, E6, E7, E8, E9 | Firmware soaks 72 h on the bench; service ingests from the real gateway and serves the API; alerts replay green; Tempest optional path passes with it on and off |
-| **P3 Link test and install** | 2-3 | E4 (4.4), E10 | 48 h link test through the repeater meets PRD >=95% and >= 10 dB margin over the chosen SF floor on each hop before anything is bonded; node installed and calibrated |
+| **P3 Link test and install** | 2-3 | E4 (4.4), E10 | 48 h direct link test to the gateway meets PRD >=95% and >= 10 dB margin over the chosen SF floor before anything is bonded; node installed and calibrated |
 | **P4 Shakedown** | 3 | E10 (10.4), E13 | 2-week shakedown meets PRD section 7 metrics 2 and 3; runbook exists |
 | **P5 Winter test and analysis** | 4 | E11 | December-February report with a yes/no solar verdict backed by telemetry |
 | **P6 SignBoard panel (later, separate repo)** | 3-4 | E12 | Panel shows level, trend, residual, and the stale state; tracked in the SignBoard repo |
@@ -50,8 +52,8 @@ parallel: 5.1-5.3 raw capture on the mini PC (must be live at install)
 | E0 | Site and decisions | Facts and choices that block ordering and building | P0 |
 | E1 | Bench and spikes | Measured numbers replace the architecture's estimates | P1 |
 | E2 | Power system | A built, tested power path, using BATTERY.md decisions | P1 |
-| E3 | Node firmware | Wake, measure, send one group datagram, deep sleep | P2 |
-| E4 | Gateway, repeater, and link | Frames get from the ramp to the mini PC reliably | P2-P3 |
+| E3 | Node firmware | Wake, measure, send one encrypted LoRa frame, deep sleep | P2 |
+| E4 | Gateway and link | Frames get from the ramp to the mini PC reliably over one hop and Wi-Fi | P2-P3 |
 | E5 | `tidesvc` core | Ingest, store raw, convert, serve the API, deploy | P2 |
 | E6 | NOAA and calibration | Predictions, residual, install fit, bounded monthly refit | P2 |
 | E7 | Energy log | Daily harvest, state of charge, verdict | P2 |
@@ -68,9 +70,9 @@ parallel: 5.1-5.3 raw capture on the mini PC (must be live at install)
 
 ```
 E0 -> E1 -> E2 -> E3 -> E4.4 -> E10 -> E11
-E0 -> E4.1/4.2/4.3 (radio settings, repeater) -> E4.4
-E3.4 (golden vectors) -> E5.2 (codec)
-E4.1 (gateway) -> E5.3 (radio) 
+E0 -> E4.1/4.2/4.3 (gateway firmware, radio settings, gateway placement) -> E4.4
+E3.4 (golden vectors) -> E5.2 (codec), E4.1 (gateway frame filter)
+E4.1 (gateway) <-> E5.3 (ingest endpoint) 
 E5 -> E6, E7, E8 (all read the readings table)
 E5 + E6 + E7 -> E8 (alert rules need level, residual, energy)
 E5 -> E9 (optional, additive)
@@ -96,50 +98,51 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
   - [ ] Orientation of the sensor axis marked and photographed
   - [ ] South-face shading assessed for a December noon sun (~26 deg elevation): piles, boats, structure; photo and a rough percent estimate
   - [ ] Free space under the ramp measured against the candidate enclosure and cell size
-  - [ ] Physical spot for the repeater and the gateway antenna noted (feeds E4)
+  - [ ] Gateway spot chosen and recorded (feeds E4.3): distance to the ramp, height above water, line of sight, window glazing (plain or coated), and whether its Wi-Fi reaches the mini PC's port 8120. **No repeater any more, so this spot decides the link** (ARCHITECTURE 2.4)
 
 #### E0.2 Resolve blocking choices before ordering
 - **Labels:** `epic:E0-site`, `phase:P0`, `type:chore`, `area:docs`
 - **Size:** 2 · **Depends on:** `docs/BATTERY.md` complete (input), E0.1
 - **Body:** Close the items that block the order. Take battery, cell, and charger conclusions from BATTERY.md as given.
   - [x] Q7 closed: 26650 LiFePO4 (Nick, 2026-10-10; fits the Fibox PCB 65T by outside dimensions)
-  - [ ] 26650 physically test-fitted in the chosen enclosure, against the space measured in E0.1
+  - [ ] 26650 physically test-fitted in the chosen enclosure, against the space measured in E0.1. **Nick's bench to-do, still open (2026-11-04)**
+  - [ ] Bioenno cell label read on arrival: capacity recorded (planning value 3200 mAh; update `energy.capacity_mah` if different)
   - [x] Charger part chosen per BATTERY.md: TI BQ25185 on Adafruit 6091 (architecture v0.2 and BOM v0.2 agree)
-  - [ ] Panel open-circuit voltage measured on the 1 W flexible amorphous panel (or its datasheet value recorded) and checked against the BQ25185 input (3.6-18 V operating; BATTERY.md expects about 7.7 V for a 6 V panel)
+  - [ ] Panel open-circuit voltage measured on the 1 W flexible amorphous panel (or its datasheet value recorded) and checked against the BQ25185 input (3.6-18 V operating; BATTERY.md expects about 7.7 V for a 6 V panel). **Nick's bench to-do, still open (2026-11-04)**
   - [ ] SMA vs RP-SMA confirmed for the Heltec V3 and the antenna
   - [ ] US enclosure source with gland options chosen
-  - [ ] Private radio settings requested from E4.2 (so both radios can be ordered and flashed the same way)
+  - [ ] Private radio settings requested from E4.2 (so node and gateway can be flashed the same way)
 
-#### E0.3 Update BOM and architecture for the repeater
+#### E0.3 Update BOM and architecture for the transport (repeater, then direct link)
 - **Labels:** `epic:E0-site`, `phase:P0`, `type:chore`, `area:docs`
 - **Size:** 1 · **Depends on:** E0.2
-- **Body:** Nick's answer to Q1: a repeater bridges the ramp to the gateway. It is **Nick's existing designed solar PVC-tube repeater** (RAK4631 + RAK19007).
-  - [x] BOM gains the repeater hardware as an already-owned/planned item (BOM v0.2)
-  - [x] ARCHITECTURE ADR-003 updated from "zero-hop default" to "flood via the repeater"; de-dup on `(node_id, boot_count, seq)` covers direct plus relayed copies (ARCHITECTURE v0.2, 5.4)
-  - [x] ARCHITECTURE section 5.3 fallback text updated; repeater health added (5.5); PRD Q1b marked resolved (PRD v0.3)
-  - [ ] Repeater build status confirmed with Nick (as of 2026-09-29 its parts were listed but not bought)
+- **Body:** v0.2: Nick's PVC-tube repeater bridged the ramp to the gateway (done in BOM/ARCHITECTURE v0.2). **2026-11-04: the repeater is taken down;** the node sends point-to-point to a Wi-Fi gateway.
+  - [x] v0.2 repeater changes (BOM v0.2, ARCHITECTURE v0.2, PRD v0.3), now superseded
+  - [x] Docs updated for the direct link: PRD v0.4 (D20), ARCHITECTURE v0.3 (sections 2, 5, ADR-001 to 004), BOM v0.3 (repeater section removed, gateway G1-G5), TEST-PLAN v0.3
+  - [ ] Nick confirms dropping MeshCore entirely (ARCHITECTURE Q12); if not, ARCHITECTURE 2.1's alternative (MeshCore framing with a MeshCore-library gateway) replaces sections 2.2 and 5.2
+  - [ ] GitHub issues E0.3, E1.1, E3.3-E3.6, E4.1-E4.4, E5.3, E5.4, E5.7-E5.9, E8.3, E13.1, E13.2 edited to this text; E5.9 closed as dropped
 
 #### E0.4 Order parts (needs Nick's approval to spend)
 - **Labels:** `epic:E0-site`, `phase:P0`, `type:chore`, `area:hardware`
 - **Size:** 1 · **Depends on:** E0.2, E0.3
-- **Body:** Node, gateway Heltec V3, antenna, enclosure, cell, charger, B3435 NTC and 130 kΩ resistor, LM66100, INA3221 breakout, fuse, breather vent, panel, bonding and isolation hardware, current-measurement gear (PPK2/Otii/uCurrent). Repeater parts are Nick's own project, not part of this order.
+- **Body:** Node, gateway Heltec V3 with its antenna and USB wall adapter, node antenna, enclosure, cell, charger, two B3435 NTCs, the 130 kΩ and 10 kΩ 0.1% resistors, LM66100, INA3221 breakout, fuse, breather vent, panel, bonding and isolation hardware, current-measurement gear (PPK2/Otii/uCurrent).
   - [ ] Parts list agrees with the updated BOM
   - [ ] Nick has approved the spend
   - [ ] Order placed; delivery dates noted against the end-of-November install target
 
 ### P1 - Bench
 
-#### E1.1 Spike S1: minimal MeshCore sender that never listens
+#### E1.1 Spike S1: minimal LoRa sender that never listens
 - **Labels:** `epic:E1-bench`, `phase:P1`, `type:spike`, `area:firmware`, `risk:high`
 - **Size:** 5 (time box: 2 days) · **Depends on:** E0.4
-- **Body:** The architecture's central claim is unverified: a library `Mesh` subclass with no identity, no RX, and deep sleep straight after TX works on MeshCore v1.17.1. Prove or disprove it before building on it.
-  - [ ] PlatformIO env builds with MeshCore pinned by git tag `companion-v1.17.1` (not by library version)
-  - [ ] Sender transmits one `GRP_DATA` on a private channel with data type `0xFF54`, then enters deep sleep without ever enabling receive
-  - [ ] A stock `companion_radio_usb` v1.17.1 gateway emits `CHANNEL_DATA_RECV` (`0x1B`) and the payload bytes match the sent bytes exactly (read via `meshcore_py`/`meshcore-cli`)
-  - [ ] Channel secret and radio settings come from NVS or a provisioning step, not from source or git
-  - [ ] 100 consecutive cycles with zero loss at bench distance
-  - [ ] Behaviour through the repeater (flood) captured if the repeater is on hand; otherwise recorded as pending for E4.3
-  - [ ] Findings and a go/no-go written to `docs/bench/S1.md`. **If no-go,** stop and bring the options to Nick; do not silently fall back to the stock sensor firmware, which costs ~20x the energy budget
+- **Body:** Rewritten 2026-11-04 (MeshCore dropped, ARCHITECTURE 2.1). Prove the node's radio path before building on it: RadioLib on the Heltec V3, the 54-byte encrypted frame, deep sleep with no RX, and end-to-end opening on the server.
+  - [ ] PlatformIO env builds with RadioLib and rweather/Crypto pinned by version in `platformio.ini`
+  - [ ] Sender does a channel-activity scan, transmits one 54-byte frame (ARCHITECTURE 2.2) on the private settings, then enters deep sleep without ever enabling receive
+  - [ ] A bench gateway (E4.1 prototype, or a second Heltec logging to serial) receives the frame; `tidesvc`'s codec opens it with the link key and the payload bytes match exactly
+  - [ ] ChaCha20-Poly1305 output from the C++ side matches Python `cryptography` on the shared vectors (header as AAD, nonce rule from ARCHITECTURE 2.2)
+  - [ ] Link key and radio settings come from NVS via provisioning, not from source or git; `epoch` persists and increments on cold boot
+  - [ ] 100 consecutive cycles with zero loss at bench distance; airtime measured at SF7 and SF9 against ARCHITECTURE 2.3
+  - [ ] Findings and a go/no-go written to `docs/bench/S1.md`. **If no-go,** stop and bring the options to Nick
 
 #### E1.2 Measure sleep current and awake profile
 - **Labels:** `epic:E1-bench`, `phase:P1`, `type:spike`, `area:hardware`
@@ -186,9 +189,10 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Body:** Confirm the charger actually does what the winter test relies on: BQ25185 on Adafruit 6091, 3.65 V, 250 mA, B3435 NTC with 130 kΩ in parallel (BATTERY.md tests T1, T2, T3, T7, T9).
   - [ ] Panel plus charger work together: charger input limit versus measured panel Voc and short-circuit current (flexible amorphous panel)
   - [ ] Hardware cold window measured with the 130 kΩ in place (expected about -3 °C stop / +2.4 °C resume; T2); SYS stays up from the panel during the inhibit
+  - [ ] Battery thermistor (the MCU's NTC on the cell, BATTERY.md 3.4) read through the ADC against a reference thermocouple: error near 0 °C recorded (expected about ±0.5 °C); open and shorted thermistor detected as `tbat_error`
   - [ ] STAT1/STAT2 readable as GPIOs (no more than 3.3 V at the pin); /CE: **HIGH disables charging**; the 1 MΩ pull-up keeps charging off with the MCU unpowered; firmware drives /CE LOW to enable, held through deep sleep (T3)
   - [ ] Safety timer: without the firmware CE pulse charging latches off at 6 h; with a pulse about every 4 h it does not (T7)
-  - [ ] Whether the NTC can be placed on the cell (not the board) in the chosen enclosure confirmed
+  - [ ] Both NTCs (charger TS and MCU) placed on the cell (not the board) in the chosen enclosure confirmed
 
 #### E1.7 Phase 1 exit review
 - **Labels:** `epic:E1-bench`, `phase:P1`, `type:chore`, `area:docs`
@@ -210,9 +214,9 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 #### E2.2 Assemble and test the power path
 - **Labels:** `epic:E2-power`, `phase:P1`, `type:story`, `area:hardware`
 - **Size:** 5 · **Depends on:** E2.1, E1.3, E1.6
-- **Body:** Panel input, charger, INA3221 (ch1 panel, ch2 cell side), fuse, cell, NTC ∥ 130 kΩ, /CE GPIO with 1 MΩ pull-up, SYS → LM66100 → Heltec JP1, battery disconnect jumper (BATTERY.md 3.4).
+- **Body:** Panel input, charger, INA3221 (ch1 panel, ch2 cell side), fuse, cell, charger NTC ∥ 130 kΩ, battery thermistor divider to an ADC1 pin, /CE GPIO with 1 MΩ pull-up, SYS → LM66100 → Heltec JP1, battery disconnect jumper (BATTERY.md 3.4).
   - [ ] Wiring matches BATTERY.md 3.4 and the architecture block diagram; INA3221 reads both channels
-  - [ ] Charge cycle observed end to end: STAT charging then done, with logged vbat, vpanel, ipanel
+  - [ ] Charge cycle observed end to end: STAT charging then done, with logged vbat, vpanel, ipanel, ibat, tbat
   - [ ] Battery disconnect or jumper present for programming; "no USB with cell attached" label on the unit
   - [ ] Sleep current with this path matches E1.2
 
@@ -222,7 +226,7 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Body:**
   - [ ] Boards, cell, and wiring fit with drip loops and strain relief
   - [ ] Conformal coat applied to boards; desiccant placed; glands sealed
-  - [ ] NTC on the cell, not the board
+  - [ ] Both NTCs on the cell, not the board
   - [ ] Pressure/leak test (water spray or submersion of the closed empty box)
 
 ### P2 - Node firmware (E3)
@@ -230,9 +234,9 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 #### E3.1 Cycle state machine and battery-state intervals
 - **Labels:** `epic:E3-firmware`, `phase:P2`, `type:story`, `area:firmware`
 - **Size:** 5 · **Depends on:** E1.1, E1.3
-- **Body:** Wake, power read, sample or skip, build, transmit, sleep. Interval by battery state: normal 5 min, low 15 min, critical 60 min with a health-only payload.
+- **Body:** Wake, power read, sample or skip, build, encrypt, transmit, sleep. Interval by battery state: normal 5 min, low 15 min, critical 60 min with a health-only payload.
   - [ ] Thresholds are the measured values from E1.3
-  - [ ] RTC memory carries `seq`, `boot_count`; `reboot` flag set on cold boot; reset reason mapped to `brownout_reset` and `wdt_reset`
+  - [ ] RTC memory carries `seq`, `boot_count`; NVS carries `epoch` (incremented on cold boot and on `seq` wrap, ARCHITECTURE 2.2); `reboot` flag set on cold boot; reset reason mapped to `brownout_reset` and `wdt_reset`
   - [ ] A watchdog ensures the node always returns to sleep (a hung radio must not drain the cell)
   - [ ] Native tests cover state selection and interval selection
   - [ ] Never enters receive mode (asserted in a test or by code review checklist)
@@ -249,81 +253,83 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Labels:** `epic:E3-firmware`, `phase:P2`, `type:story`, `area:firmware`
 - **Size:** 5 · **Depends on:** E2.2, E1.6
 - **Body:** FR6 on the node side.
-  - [ ] INA3221 one-shot read of vbat, vpanel, ipanel, then power-down; Vext switched off in sleep
+  - [ ] INA3221 one-shot read of vbat, vpanel, ipanel and **ibat** (ch2 shunt, signed; Nick 2026-11-04), then power-down; Vext switched off in sleep
+  - [ ] Battery thermistor read through the ADC1 pin and converted (B3435 beta); `tbat` sent; open/short sets `tbat_error`
   - [ ] STAT1/STAT2 mapped into the `chg` byte per ARCHITECTURE 4.7 (CHRG, DONE, cold_charge_inhibit, CE override, latch fault, CE pulse)
-  - [ ] Firmware owns the 0 °C rule: drives /CE **HIGH (disable)** below +1 C or when temperature is unknown, **LOW (enable)** above +2 C, holds state in between, and reports it (ARCHITECTURE 4.3)
+  - [ ] Firmware owns the 0 °C rule **on the battery thermistor** (Nick, 2026-11-04; not the SCL3300 die): drives /CE **HIGH (disable)** below +1 C or when `tbat` is unknown, **LOW (enable)** above +2 C, holds state in between, and reports it (ARCHITECTURE 4.3)
   - [ ] Safety-timer pulse: after about 4 h of continuous charging (counted in RTC memory), /CE pulsed HIGH briefly then LOW
   - [ ] /CE state held through deep sleep (`gpio_hold_en`)
   - [ ] "No sun" and "too cold to charge" are distinguishable in the payload (PRD FR6)
   - [ ] `ina_error` flag set on read failure instead of reporting zeros
 
-#### E3.4 Payload v1 codec and shared golden vectors
+#### E3.4 Payload v2 codec, frame, and shared golden vectors
 - **Labels:** `epic:E3-firmware`, `phase:P2`, `type:story`, `area:firmware`
-- **Size:** 3 · **Depends on:** none (spec in ARCHITECTURE 4.7)
-- **Body:** 26-byte little-endian payload, CRC-16/CCITT-FALSE over bytes 0-23.
-  - [ ] `uplink.{h,cpp}` encoder per the field table
-  - [ ] `tests/fixtures/packets_v1.json` holds golden vectors incl. edge values (negative pitch, saturated SD, all flags)
-  - [ ] PlatformIO native test passes on the vectors; the same file is consumed by E5.2
+- **Size:** 3 · **Depends on:** none (spec in ARCHITECTURE 2.2 and 4.7)
+- **Body:** 30-byte little-endian payload v2 (v1 + `ibat` + `tbat`), CRC-16/CCITT-FALSE over bytes 0-27, inside the 54-byte frame (8-byte header as AAD, ChaCha20-Poly1305, 16-byte tag).
+  - [ ] Encoder per the field table; frame seal per the nonce rule
+  - [ ] Golden vectors in `tests/vectors/` (v2 payloads and sealed frames, with a fixed test key) incl. edge values (negative pitch and `ibat`, saturated SD, all flags, `tbat_error`); v1 vectors kept for the decoder
+  - [ ] PlatformIO native test passes on the vectors; the same files are consumed by E5.2 and the gateway's frame filter (E4.1)
 
 #### E3.5 Provisioning command and routing options
 - **Labels:** `epic:E3-firmware`, `phase:P2`, `type:story`, `area:firmware`
 - **Size:** 3 · **Depends on:** E1.1, E4.2
 - **Body:** One-time USB serial `provision` command writing NVS.
-  - [ ] Stores 16-byte channel secret, node id, TX power, frequency, bandwidth, SF, CR, routing (flood default; zero-hop for bench only), `tx_repeats`
-  - [ ] Secret never appears in source, build artifacts, or logs
+  - [ ] Stores the 32-byte link key, node id, TX power, frequency, bandwidth, SF, CR, sync word, `tx_repeats` (no routing options any more)
+  - [ ] Key never appears in source, build artifacts, or logs
   - [ ] Settings can be read back (secret masked) to verify what a deployed node carries
   - [ ] Procedure documented for the runbook (changing settings needs USB because the node never listens)
 
 #### E3.6 72-hour bench soak
 - **Labels:** `epic:E3-firmware`, `phase:P2`, `type:story`, `area:firmware`
-- **Size:** 3 · **Depends on:** E3.1-E3.5, E4.1, E5.3 (or `meshcore-cli` logging)
-- **Body:** Node on a bench supply and the real gateway, sending every 5 min.
+- **Size:** 3 · **Depends on:** E3.1-E3.5, E4.1, E5.3
+- **Body:** Node on a bench supply and the real gateway posting to `tidesvc`, sending every 5 min.
   - [ ] 72 h with no stuck cycle; sequence continuity from gateway log (loss measured, not assumed)
   - [ ] Measured daily consumption within 25 mAh/day budget
   - [ ] A deliberate brownout and a deliberate reboot show the right flags
   - [ ] Result recorded in `docs/bench/`
 
-### P2 - Gateway, repeater, and link (E4)
+### P2 - Gateway and link (E4)
 
-#### E4.1 Gateway radio: flash, configure, and attach
+#### E4.1 Gateway firmware: receive, queue, forward, heartbeat
 - **Labels:** `epic:E4-link`, `phase:P2`, `type:story`, `area:gateway`
-- **Size:** 2 · **Depends on:** E0.4, E4.2
-- **Body:** Stock `Heltec_v3_companion_radio_usb` v1.17.1 on the second Heltec V3.
-  - [ ] Flashed from the official flasher; version confirmed with `meshcore-cli`
-  - [ ] Radio parameters set to the private settings; name `tide-gw`; channel slot 1 = private channel "tide" with the node's secret; public channel slot not used by our filter
-  - [ ] udev rule creates `/dev/meshcore-gw` matched on the board's serial
-  - [ ] Antenna placement chosen (E0.1) and connected; USB plugged into the mini PC
+- **Size:** 5 · **Depends on:** E0.4, E4.2, E3.4, E5.3
+- **Body:** Rewritten 2026-11-04. Custom firmware (PlatformIO env `heltec_v3_gateway`) on the second Heltec V3, on the home/marina Wi-Fi (ARCHITECTURE 5.1-5.3).
+  - [ ] Continuous RX on the private settings; frames filtered on LoRa CRC, length 54 and `fmt = 0x54`; RSSI, SNR and frequency error recorded; no decryption and no link key on the gateway
+  - [ ] RAM queue of 288 frames; `POST /api/v1/ingest/frames` with bearer token and per-frame `age_ms`; frames removed only after a 200; retry with backoff
+  - [ ] `POST /api/v1/ingest/heartbeat` every 60 s with uptime, firmware, Wi-Fi RSSI, queue depth, RX/CRC-error/wrong-format counters, noise floor
+  - [ ] Watchdog; Wi-Fi reconnect; reboot after 30 min without a successful POST while Wi-Fi is up
+  - [ ] USB provisioning into NVS: Wi-Fi SSID/password, server URL, ingest token, gateway id, radio settings; none in git; settings readable back with secrets masked
+  - [ ] Powered from a USB wall adapter at the spot chosen in E0.1
 
 #### E4.2 Choose the private radio settings
 - **Labels:** `epic:E4-link`, `phase:P0`, `type:spike`, `area:gateway`
 - **Size:** 2 · **Depends on:** none
-- **Body:** Nick chose a private frequency and encrypted private channel (Q2). Frequency, bandwidth, and SF are still to choose within 902-928 MHz.
-  - [ ] A scan with a spare radio (or `meshcore-cli`/RadioLib RSSI sweep) shows which sub-bands are quiet at the marina and at the mini PC
-  - [ ] Frequency, BW, SF, CR chosen and written to ARCHITECTURE ADR-003 update; starting point is SF7-SF9 and BW62.5-125 with the ~10 dB margin rule
-  - [ ] Airtime and mAh/day recomputed for the chosen settings (arch: SF10/BW125 adds ~4.4 mAh/day)
-  - [ ] Same settings applied to node, repeater, and gateway from one config note (the node's settings must match the repeater's)
-  - [ ] Nick confirms that moving his repeater to the private frequency is acceptable (it then no longer serves the public US mesh)
-  - [ ] Per-hop acceptance threshold written down for the chosen SF: median SNR at least 10 dB above that SF's floor (ARCHITECTURE 5.4)
+- **Body:** Nick chose a private frequency and encrypted frames (Q2). Frequency, bandwidth, SF and CR are still to choose within 902-928 MHz, for one direct hop (no repeater).
+  - [ ] A scan with a spare radio (RadioLib RSSI sweep) shows which sub-bands are quiet at the ramp and at the gateway spot
+  - [ ] Frequency, BW, SF, CR and sync word chosen and written to ARCHITECTURE ADR-003; planning start SF9/BW125, SF10 the upper limit (ARCHITECTURE 2.3-2.4)
+  - [ ] Airtime and mAh/day recomputed for the chosen settings (ARCHITECTURE 2.3, 4.4)
+  - [ ] Same settings applied to node and gateway from one config note
+  - [ ] Acceptance threshold written down for the chosen SF: median SNR at least 10 dB above that SF's floor (ARCHITECTURE 5.4)
+  - [ ] FCC Part 15 basis for a single fixed channel at the chosen power and airtime checked and noted (ARCHITECTURE 13 item 8; unverified)
 
-#### E4.3 Repeater: configure and verify the bridge
+#### E4.3 Gateway placement and direct-link check
 - **Labels:** `epic:E4-link`, `phase:P2`, `type:story`, `area:gateway`
-- **Size:** 3 · **Depends on:** E4.1, E4.2, E1.1, E0.3
-- **Body:** Node to Nick's solar PVC-tube repeater to gateway, with the node sending in flood mode. The repeater's own power budget is outside this project (Nick, 2026-10-10); only its liveness is in scope (E5.9).
-  - [ ] Repeater firmware (`repeater-v1.17.1` or matching) set to the private settings; periodic advert interval set so `tidesvc` can see it is alive
-  - [ ] Frame sent flood from the node reaches the gateway with `path_len >= 1` when the gateway cannot hear the node directly
-  - [ ] No public-mesh traffic is forwarded because of the private frequency; nothing hears the channel without the secret
-  - [ ] `tidesvc` de-dup behaves if the gateway hears both the direct and relayed copy
-  - [ ] Repeater `powersaving` mode tested; delivery rate with and without it recorded (the choice is Nick's, for his repeater's budget)
-  - [ ] Repeater placement documented in the runbook draft
+- **Size:** 3 · **Depends on:** E4.1, E4.2, E1.1, E0.1
+- **Body:** Replaces the v0.2 repeater story (repeater taken down 2026-11-04). The direct link is the main RF risk now (ARCHITECTURE 2.4).
+  - [ ] Gateway at the E0.1 spot posts heartbeats to the mini PC over the Wi-Fi (network path to port 8120 confirmed)
+  - [ ] Walk test: node held at the ramp in its planned antenna position, frames received with RSSI/SNR recorded at high and low tide
+  - [ ] Measured margin compared with the link budget in ARCHITECTURE 2.4, and the assumed losses replaced with measured ones
+  - [ ] If margin is short, the ladder in ARCHITECTURE 2.4 is tried and recorded (SF, outside antenna, closer spot, `tx_repeats`); if none works, bring the relay question to Nick
+  - [ ] Gateway placement documented in the runbook draft
 
 #### E4.4 48-hour link test from the final node position
 - **Labels:** `epic:E4-link`, `phase:P3`, `type:story`, `area:gateway`, `gate`
 - **Size:** 3 · **Depends on:** E3.6, E4.3, E5.3, E0.1
 - **Body:** Before anything is bonded to the ramp (PRD).
-  - [ ] Node in its planned spot and antenna position (temporary hold, no adhesive), with the repeater and gateway in their planned places
-  - [ ] 48 h or more: end-to-end delivery >= 95%, and each hop has >= 10 dB margin over the chosen SF's floor (gateway SNR for repeater → gateway; 10 dB attenuator test, TEST-PLAN RF-3, for node → repeater)
+  - [ ] Node in its planned spot and antenna position (temporary hold, no adhesive), with the gateway in its planned place
+  - [ ] 48 h or more: delivery >= 95%, and >= 10 dB margin over the chosen SF's floor (gateway SNR per frame; 10 dB attenuator test, TEST-PLAN RF-3)
   - [ ] Repeated or extended across a high and a low tide (geometry changes with float height)
-  - [ ] If short: the ladder is tried in order, each with a recorded result: lower TX power not helpful, higher SF on all three radios, antenna reposition, `tx_repeats = 1`
+  - [ ] If short: the ladder is tried in order, each with a recorded result: lower TX power not helpful, higher SF on both radios, gateway antenna outside or higher, gateway moved closer, `tx_repeats = 1`
   - [ ] Result and settings written up; **install (E10.2) is blocked until this passes**
 
 ### P2 - tidesvc core (E5)
@@ -335,44 +341,39 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
   - [ ] Python 3.12 project at `src/tidesvc/` with pytest, ruff, and config loader (`config.toml`, secrets from `.env`)
   - [ ] SQLite WAL schema with migrations: `packets_raw`, `readings`, `derived`, `calibrations`, `cal_observations`, plus the other tables from ARCHITECTURE 6.9; `meta(schema_version)`
   - [ ] Single writer behind an asyncio queue, read-only connections for the API
-  - [ ] Dockerfile and compose file that builds and starts with the radio absent
+  - [ ] Dockerfile and compose file that builds and starts with no gateway posting
   - [ ] Timestamps UTC in storage; local-day helper for America/New_York
 
 #### E5.2 Codec: decode v1, CRC, de-dup, sequence gaps
 - **Labels:** `epic:E5-service`, `phase:P2`, `type:story`, `area:service`
 - **Size:** 3 · **Depends on:** E3.4, E5.1
 - **Body:**
-  - [ ] Decodes every golden vector from `packets_v1.json` identically to the C++ encoder
-  - [ ] Bad CRC, wrong `ver`, or wrong length stored in `packets_raw` with `parse_status`, never dropped
-  - [ ] De-dup on `(node_id, boot_count, seq)`; duplicates counted, not stored twice
+  - [ ] Opens and decodes every golden vector (v2 frames, v1 payloads) identically to the C++ encoder
+  - [ ] Bad tag, bad CRC, wrong `ver`, header/payload mismatch, or wrong length stored in `packets_raw` with `parse_status`, never dropped
+  - [ ] De-dup on `(node_id, epoch, seq)`; frames from an older epoch rejected as replays; duplicates counted, not stored twice
   - [ ] Sequence gaps (and wraps and reboots) counted so delivery % is computable per day
 
-#### E5.3 Radio module: meshcore_py ingest and gateway health
+#### E5.3 Ingest endpoint: gateway HTTP POST and gateway health
 - **Labels:** `epic:E5-service`, `phase:P2`, `type:story`, `area:service`
-- **Size:** 5 · **Depends on:** E4.1, E5.1, E5.2
-- **Body:** The raw-capture slice that must be live before install.
-  - [ ] Connects with `create_serial`, verifies channel slot 1 and sets it from `.env` secret if missing, subscribes to `CHANNEL_DATA_RECV`
-  - [ ] Every frame inserted raw first, then filtered on channel and data type, decoded, and handed to derive
-  - [ ] 60 s heartbeat; link failure sets gateway `error`, reconnects with 1 s to 60 s backoff, writes `gateway_events`; the API keeps serving
-  - [ ] Host stamps arrival time; backlog drain detected and back-dated from `seq` with `time_source = "backfilled"`
-  - [ ] Gateway `ok` with no frames is reported differently from gateway `error` (node silent vs mini PC problem)
+- **Size:** 5 · **Depends on:** E5.1, E5.2
+- **Body:** Rewritten 2026-11-04 (replaces the meshcore_py radio module). The raw-capture slice that must be live before install (ARCHITECTURE 5.3, 5.5).
+  - [ ] `POST /api/v1/ingest/frames` and `/heartbeat` with bearer-token check (`TIDE_INGEST_TOKEN`); 401 stores nothing; 200 only after every frame is stored raw
+  - [ ] Every frame inserted raw first (with gateway id, `age_ms`, RSSI, SNR), then opened, decoded and handed to derive
+  - [ ] Reading time `t = rx_at - age_ms`; `time_source = "queued"` above 2 intervals; seq back-dating only as a fallback
+  - [ ] Gateway status `ok|error|unknown` from heartbeats; `gateway_events` written; the API keeps serving with no gateway
+  - [ ] Gateway `ok` with no frames is reported differently from gateway `error` (node or link vs gateway/network)
 
-#### E5.9 Repeater health
+#### E5.9 Repeater health (dropped 2026-11-04)
 - **Labels:** `epic:E5-service`, `phase:P2`, `type:story`, `area:service`
-- **Size:** 3 · **Depends on:** E5.3, E4.3
-- **Body:** ARCHITECTURE 5.5. A dead repeater must be distinguishable from a dead node.
-  - [ ] Repeater evidence recorded: relayed node frames (`path_len >= 1`), the repeater's periodic advert (matched on its public-key prefix), and optionally a status request (off by default)
-  - [ ] The unverified `meshcore_py` advert event and status-request calls confirmed, or the feature trimmed to relayed frames only, with the result written down
-  - [ ] Repeater status `ok|silent|unknown` in `/api/v1/status` and `/api/v1/node/health`; `repeater_events` table
-  - [ ] Tests with the fake companion: relayed frames, advert only, silence; status changes as specified
-  - [ ] No energy verdict for the repeater (its power budget is out of scope)
+- **Size:** 0 (was 3) · **Depends on:** none
+- **Body:** **Dropped:** the repeater is taken down (Nick, 2026-11-04). Gateway health (E5.3) covers the remaining "which box is dead" question. Close the GitHub issue. If code for repeater health already exists (BUILD.md), remove it with the MeshCore adapter.
 
-#### E5.4 Fake companion and ingest integration tests
+#### E5.4 Fake gateway and ingest integration tests
 - **Labels:** `epic:E5-service`, `phase:P2`, `type:story`, `area:service`
 - **Size:** 3 · **Depends on:** E5.3
 - **Body:**
-  - [ ] pty-based fake companion speaking `0x83` and `0x1B` frames
-  - [ ] Tests: normal flow, backlog drain with backfilled timestamps, unplug and replug, corrupt frame, wrong channel, wrong data type
+  - [ ] Fake gateway (HTTP client) posting frame batches and heartbeats to the real app
+  - [ ] Tests: normal flow, queued frames with large `age_ms`, retried batch (duplicates), bad token, bad tag, corrupt frame, wrong format byte, heartbeat loss and recovery
   - [ ] Runs in CI-less local `pytest` in under a minute
 
 #### E5.5 Derive: level conversion, validity, and smoothing
@@ -400,7 +401,7 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Body:**
   - [ ] Daily CSV of raw and derived data including power telemetry at 00:15 local; `GET /api/v1/export/{date}.csv`
   - [ ] Nightly `sqlite3 .backup` to the local backups folder with 14 copies (off-box copy is E13.2)
-  - [ ] Second-location backup implemented per Nick's answer to Q10 (location TBD by Nick; story stays open until he names it)
+  - [ ] Off-box copy to **a Google Drive folder** (Nick, 2026-11-04) via `rclone`; upload failure visible as `backup` status (ARCHITECTURE 6.9). Nick names the folder and authorises the rclone remote
 
 #### E5.8 Deploy to the mini PC
 - **Labels:** `epic:E5-service`, `phase:P2`, `type:story`, `area:service`
@@ -408,8 +409,8 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Body:** Separate compose project under `/opt/tidesvc/`, same pattern as SignBoard.
   - [ ] Port 8120 confirmed free on the mini PC (or another port chosen; configurable)
   - [ ] `deploy.sh` (rsync + `docker compose up -d --build` over Tailscale), run by Nick
-  - [ ] udev rule installed; container starts with the radio unplugged and recovers on replug without a restart
-  - [ ] Container runs non-root in `dialout`; `.env` holds secrets and is not committed
+  - [ ] Port 8120 reachable from the gateway's Wi-Fi; container starts with no gateway and picks up its first heartbeat without a restart
+  - [ ] Container runs non-root; `.env` (link key, ingest token, SMTP, Tempest) and the rclone config hold secrets and are not committed
   - [ ] systemd + venv fallback written down but not built
 
 ### P2 - NOAA and calibration (E6)
@@ -514,10 +515,10 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 #### E8.3 Health rules
 - **Labels:** `epic:E8-alerts`, `phase:P2`, `type:story`, `area:service`
 - **Size:** 3 · **Depends on:** E8.1, E7.1, E6.5
-- **Body:** `NODE_SILENT`, `GATEWAY_DOWN`, `REPEATER_SILENT`, `LOW_BATTERY`, `ENERGY_DEFICIT`, `ENERGY_NEGATIVE_STREAK`, `SENSOR_QUALITY`, `OUT_OF_RANGE`, `PREDICTION_UNAVAILABLE`, `CALIBRATION_DRIFT`.
+- **Body:** `NODE_SILENT`, `GATEWAY_DOWN`, `LOW_BATTERY`, `ENERGY_DEFICIT`, `ENERGY_NEGATIVE_STREAK`, `SENSOR_QUALITY`, `OUT_OF_RANGE`, `PREDICTION_UNAVAILABLE`, `CALIBRATION_DRIFT`.
   - [ ] Each rule from ARCHITECTURE 6.8 implemented with its open and clear conditions
-  - [ ] `NODE_SILENT`, `REPEATER_SILENT` and `GATEWAY_DOWN` are distinct and the email says which side to look at
-  - [ ] Open decision recorded: PRD says node silent after 15 min, architecture says alert at 30 min while displays go stale at 15 (section 7 item 1); Nick picks
+  - [ ] `NODE_SILENT` and `GATEWAY_DOWN` (no heartbeat for 5 min) are distinct and the email says which side to look at
+  - [x] Decided (Nick, 2026-11-04): `NODE_SILENT` at **30 min**; displays still go stale at 15 min. `REPEATER_SILENT` removed (no repeater)
   - [x] Decided (Nick, 2026-10-10): `ENERGY_DEFICIT` on the 14-day verdict is the official answer; `ENERGY_NEGATIVE_STREAK` sends an early-warning email after 7 consecutive negative-net days (low-coverage days skipped) and clears on the first non-negative day (PRD v0.3 FR6, ARCHITECTURE 6.6/6.8)
 
 #### E8.4 Alert replay and test email
@@ -569,7 +570,7 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Labels:** `epic:E10-install`, `phase:P3`, `type:story`, `area:hardware`
 - **Size:** 3 · **Depends on:** E2.3, E3.6
 - **Body:**
-  - [ ] Final firmware flashed; node provisioned (E3.5); label on the box: no USB with cell attached
+  - [ ] Final firmware flashed; node provisioned (E3.5); gateway provisioned (E4.1); label on the box: no USB with cell attached
   - [ ] Bracket, 316 SS fasteners, nylon washers, dielectric paste, VHB tape, antenna stub assembled and test-fit
   - [ ] Photos of the assembled unit and orientation reference
   - [ ] Spare parts: one cell, desiccant, fuses/jumper
@@ -653,17 +654,17 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 - **Body:** PRD section 3.2 and metric 5.
   - [ ] How to read health and energy views; what each flag and alert kind means and what to do
   - [ ] Swap a battery; swap desiccant; re-flash or re-provision the node over USB (and the "no USB with cell" warning)
-  - [ ] Restart the gateway, the repeater, and the service; recover from a replugged radio; "node silent and repeater silent: check the repeater first"
+  - [ ] Restart the gateway and the service; re-provision the gateway's Wi-Fi; "node silent and gateway down: check the gateway, its power and Wi-Fi first"
   - [ ] Recalibrate and approve a proposed calibration; reprocess
-  - [ ] Where secrets live and how to rotate the channel secret on all three radios
+  - [ ] Where secrets live; how to rotate the link key (node over USB, plus `tidesvc` `.env`) and the ingest token (gateway over USB, plus `.env`); restoring from the Google Drive backup
   - [ ] Nick has done at least one routine task (for example, a desiccant or battery check) from the runbook
 
 #### E13.2 Off-box backup
 - **Labels:** `epic:E13-ops`, `phase:P4`, `type:chore`, `area:service`
-- **Size:** 1 · **Depends on:** E5.7, Nick naming a location
-- **Body:**
-  - [ ] Nightly copy of the SQLite backup to the second location Nick names (for example his Mac over Tailscale)
-  - [ ] A restore from that copy tested once
+- **Size:** 1 · **Depends on:** E5.7, Nick naming the Drive folder
+- **Body:** Location decided (Nick, 2026-11-04): a Google Drive folder.
+  - [ ] Nightly copy of the SQLite backup to the Google Drive folder (rclone remote authorised by Nick on the mini PC; token not in git)
+  - [ ] A restore from the Drive copy tested once
 
 ---
 
@@ -700,10 +701,10 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 |---|---|---|---|---|---|
 | E0.1 | Site visit: ramp geometry, stringer, and south-face shading | chore, hardware | M0 | 2 | none |
 | E0.2 | Resolve blocking choices before ordering | chore, docs | M0 | 2 | BATTERY.md, E0.1 |
-| E0.3 | Update BOM and architecture for the repeater | chore, docs | M0 | 1 | E0.2 |
+| E0.3 | Update BOM and architecture for the transport (repeater, then direct link) | chore, docs | M0 | 1 | E0.2 |
 | E0.4 | Order parts (needs Nick's approval to spend) | chore, hardware | M0 | 1 | E0.2, E0.3 |
 | E4.2 | Choose the private radio settings | spike, gateway | M0 | 2 | none |
-| E1.1 | Spike S1: minimal MeshCore sender that never listens | spike, firmware, risk:high | M1 | 5 | E0.4 |
+| E1.1 | Spike S1: minimal LoRa sender that never listens | spike, firmware, risk:high | M1 | 5 | E0.4 |
 | E1.2 | Measure sleep current and awake profile | spike, hardware | M1 | 3 | E1.1 |
 | E1.3 | LiFePO4 brownout sweep on the Heltec V3 battery input | spike, hardware | M1 | 2 | E1.1, BATTERY.md |
 | E1.4 | SCL3300 bring-up and tilt-rig noise test | spike, firmware | M1 | 5 | E0.4 |
@@ -716,21 +717,21 @@ Each story is written as an issue: **Title**, **Labels**, **Size**, **Depends on
 | E3.1 | Cycle state machine and battery-state intervals | story, firmware | M2 | 5 | E1.1, E1.3 |
 | E3.2 | Burst sampling and statistics | story, firmware | M2 | 3 | E1.4 |
 | E3.3 | Power telemetry and charger control | story, firmware | M2 | 5 | E2.2, E1.6 |
-| E3.4 | Payload v1 codec and shared golden vectors | story, firmware | M2 | 3 | none |
+| E3.4 | Payload v2 codec, frame, and shared golden vectors | story, firmware | M2 | 3 | none |
 | E3.5 | Provisioning command and routing options | story, firmware | M2 | 3 | E1.1, E4.2 |
 | E3.6 | 72-hour bench soak | story, firmware | M2 | 3 | E3.1-E3.5, E4.1 |
-| E4.1 | Gateway radio: flash, configure, and attach | story, gateway | M2 | 2 | E0.4, E4.2 |
-| E4.3 | Repeater: configure and verify the bridge | story, gateway | M2 | 3 | E4.1, E4.2, E1.1 |
+| E4.1 | Gateway firmware: receive, queue, forward, heartbeat | story, gateway | M2 | 5 | E0.4, E4.2, E3.4, E5.3 |
+| E4.3 | Gateway placement and direct-link check | story, gateway | M2 | 3 | E4.1, E4.2, E1.1, E0.1 |
 | E4.4 | 48-hour link test from the final node position | story, gateway, gate | M3 | 3 | E3.6, E4.3, E5.3 |
 | E5.1 | Project skeleton, schema, and deploy scaffolding | story, service | M2 | 3 | none |
 | E5.2 | Codec: decode v1, CRC, de-dup, sequence gaps | story, service | M2 | 3 | E3.4, E5.1 |
-| E5.3 | Radio module: meshcore_py ingest and gateway health | story, service | M2 | 5 | E4.1, E5.2 |
-| E5.4 | Fake companion and ingest integration tests | story, service | M2 | 3 | E5.3 |
+| E5.3 | Ingest endpoint: gateway HTTP POST and gateway health | story, service | M2 | 5 | E5.1, E5.2 |
+| E5.4 | Fake gateway and ingest integration tests | story, service | M2 | 3 | E5.3 |
 | E5.5 | Derive: level conversion, validity, and smoothing | story, service | M2 | 5 | E5.2 |
 | E5.6 | API: status, level, health, history (no demo data) | story, service | M2 | 5 | E5.5 |
 | E5.7 | Daily CSV export and nightly backup | story, service | M2 | 2 | E5.5 |
 | E5.8 | Deploy to the mini PC | story, service | M2 | 3 | E5.1, E5.6 |
-| E5.9 | Repeater health | story, service | M2 | 3 | E5.3, E4.3 |
+| E5.9 | Repeater health (**dropped 2026-11-04**; close the issue) | story, service | M2 | 0 | none |
 | E6.1 | NOAA module | story, service | M2 | 3 | E5.1 |
 | E6.2 | Prediction interpolation, residual, and rate of rise | story, service | M2 | 3 | E6.1, E5.5 |
 | E6.3 | Quantify half-cosine error | spike, service | M2 | 2 | E6.1 |
@@ -766,25 +767,33 @@ When approved, the issues can be created with one `gh issue create --title ... -
 
 ## 7. Open items for Nick
 
-**This is the single list of open items across the planning docs** (PRD v0.3, ARCHITECTURE v0.2, BATTERY.md v0.2, BOM v0.2 and TEST-PLAN v0.2 point here). None block starting P0.
+**This is the single list of open items across the planning docs** (PRD v0.4, ARCHITECTURE v0.3, BATTERY.md v0.3, BOM v0.3 and TEST-PLAN v0.3 point here). None block starting P0. Item numbers are kept stable so existing references still work; closed items are struck through, and items added on 2026-11-04 are numbered 14-19.
 
 **Still open, needs Nick:**
-1. **Node-silent alert timing:** PRD FR4 says node silent after 15 min; ARCHITECTURE 6.8 alerts at 30 min while displays go stale at 15. Pick one (E8.3).
-2. **Off-box backup location (Q10):** nightly backup to a second location is decided, the location is not. E5.7 and E13.2 wait on it.
-3. **Repeater on the private frequency:** a repeater listens on one frequency, so moving Nick's repeater to the project's private settings means it no longer serves the public US MeshCore mesh. Confirm (E4.2). Also confirm the repeater's build status (parts were listed, not bought, as of 2026-09-29).
-4. **Panel type.** The 1 W flexible amorphous panel is lower efficiency than the mono Adafruit 3809, and the architecture's eta = 0.5 was not derived for it. Its Voc is still to be measured (BATTERY.md expects about 7.7 V for a 6 V panel, well inside the BQ25185's 18 V). If it underperforms, the headline question becomes "is this particular panel enough", which E11.3 should say.
-5. **26650 physical fit** in the Fibox PCB 65T (accepted on outside dimensions only) (E0.2).
+1. ~~Node-silent alert timing.~~ **Closed 2026-11-04:** 30 min (displays stale at 15).
+2. ~~Off-box backup location.~~ **Closed 2026-11-04:** a Google Drive folder. Nick still names the folder and authorises the rclone remote on the mini PC (E5.7, E13.2).
+3. ~~Repeater on the private frequency.~~ **Closed 2026-11-04:** the repeater is taken down.
+4. **Panel type and Voc** (Nick's bench to-do, still open). The 1 W flexible amorphous panel is lower efficiency than the mono Adafruit 3809, and the architecture's eta = 0.5 was not derived for it. Its Voc is still to be measured (BATTERY.md expects about 7.7 V for a 6 V panel, well inside the BQ25185's 18 V). If it underperforms, the headline question becomes "is this particular panel enough", which E11.3 should say.
+5. **26650 physical fit** in the Fibox PCB 65T (accepted on outside dimensions only; Nick's bench to-do, still open) (E0.2).
+14. **Confirm dropping MeshCore entirely** (ARCHITECTURE 2.1, Q12). Architecture's call: plain RadioLib point-to-point with its own 54-byte encrypted frame. The alternative is MeshCore `GRP_DATA` framing with a MeshCore-library gateway. This is a real fork, because it reverses the 2026-10-10 MeshCore choice and the existing `tidesvc.radio` / sim code assumes MeshCore (E0.3).
+15. **Gateway spot** (ARCHITECTURE Q13): distance to the ramp, height, glazing, and whether that Wi-Fi reaches the mini PC's port 8120. Without the repeater, this decides the link (E0.1, E4.3). If the direct link fails after the fallback ladder, a relay comes back as a new decision.
+16. **Bioenno cell label:** planning uses 3200 mAh; read the capacity on arrival and update `energy.capacity_mah` if it differs (E0.2).
 
 **Spec gaps (from TEST-PLAN section 11, not settled by Nick's decisions):**
-6. **Minimum number of matched extremes** for a monthly calibration fit (TEST-PLAN SV-C7). Proposal needed in E6.5.
-7. **Median rule for an even sample count** (300 samples) in firmware and server (TEST-PLAN FW-U4). Fix in one place in E3.2 / E5.5.
-8. **Cell current is not in the payload.** The BQ25185 is a linear charger with a power path, so `ipanel` = load + charge in sun. Harvest = ∫`ipanel` remains a valid measure for the energy ratio (ARCHITECTURE 6.6), and TEST-PLAN B10 now checks it that way. But INA3221 ch2 measures cell current, and payload v1 does not carry it. Decide before the payload freezes (E3.4) whether to add an `ibat` field, which would give a direct check on net charge.
-9. **Which temperature the firmware 0 °C rule uses.** ARCHITECTURE 4.3 uses the SCL3300 die temperature as an in-box proxy. The cell-bonded NTC sits on the charger's TS pin and is not read by the MCU. Decide whether the proxy plus the +1 °C threshold is enough, or add an ADC tap or a second cell sensor (E1.6, E3.3).
-10. **Hardware unknowns to check on the bench** (BATTERY.md section 10): the Adafruit 6091's existing pull on /CE and the LED pull-up rail; Heltec V3 board revision; whether SYS stays up from the panel during a TS fault.
-11. **Repeater visibility from `tidesvc`:** the advert event and status request in `meshcore_py` are unverified (ARCHITECTURE 5.5, E5.9). If neither works, repeater health falls back to relayed-frame evidence only, which cannot tell a dead repeater from a dead node once the node is also silent.
+6. **Minimum number of matched extremes** for a monthly calibration fit (TEST-PLAN SV-C7). Proposal needed in E6.5. (BUILD.md deviation 9 proposes 12, including both H and L.)
+7. **Median rule for an even sample count** (300 samples) in firmware and server (TEST-PLAN FW-U4). Fix in one place in E3.2 / E5.5. (BUILD.md deviation 9 proposes the mean of the two middle values.)
+8. ~~Cell current is not in the payload.~~ **Closed 2026-11-04:** `ibat` added (payload v2, ARCHITECTURE 4.7).
+9. ~~Which temperature the firmware 0 °C rule uses.~~ **Closed 2026-11-04:** a thermistor on the battery, read by the MCU (ARCHITECTURE 4.2, BATTERY.md 3.4). `tbat` is also logged; that field is an architecture addition beyond Nick's decision (2 bytes; drop it if unwanted).
+10. **Hardware unknowns to check on the bench** (BATTERY.md section 10): the Adafruit 6091's existing pull on /CE and the LED pull-up rail; Heltec V3 board revision; whether SYS stays up from the panel during a TS fault; battery-thermistor accuracy near 0 °C.
+11. ~~Repeater visibility from `tidesvc`.~~ **Closed 2026-11-04:** no repeater; gateway health comes from its heartbeat (ARCHITECTURE 5.5).
+17. **Link budget values are assumptions** (ARCHITECTURE 2.4): Heltec V3 delivered TX power and sensitivity, node antenna pattern next to aluminium, ramp shadowing, window loss, distance. RF-3/RF-4 replace them with measurements.
+18. **FCC Part 15 basis** for a single fixed 915 MHz channel at +22 dBm (carried over from the MeshCore design, unverified); it matters most for frames over 400 ms (SF10+) (E4.2).
+19. **Code is behind the docs.** `src/tidesvc`, `src/sim`, `firmware/lib/tidecore` and `tests/vectors` still implement the v0.2 design: MeshCore adapter, 26-byte payload v1, repeater health, and the die-temperature cold rule. They need the v0.3 changes (BUILD.md, "Design changes not yet in the code").
 
-**Resolved in this pass (2026-10-10), kept for the record:** energy alert form (14-day verdict official, 7-day early warning); PRD v0.3 written (FR1 ±5%, no ack, Q1b closed); repeater is Nick's existing PVC-tube design, flood routing, repeater power out of scope; Q7 cell size (26650) and charger (BQ25185) settled, CN3058E dropped; INA3221 and repeater added to the BOM; per-hop link-margin criterion restated.
+**Resolved on 2026-10-10, kept for the record:** energy alert form (14-day verdict official, 7-day early warning); PRD v0.3 written (FR1 ±5%, no ack, Q1b closed); repeater as the bridge (since superseded); Q7 cell size (26650) and charger (BQ25185) settled, CN3058E dropped; INA3221 added to the BOM.
+
+**Resolved on 2026-11-04 (Nick):** node-silent 30 min; Google Drive backup; repeater taken down and direct LoRa point-to-point to a Wi-Fi gateway posting to :8120; cell current in the payload; battery thermistor for the 0 °C rule; plan with 3200 mAh; board mounting permission granted (per Nick, 2026-11-04); Tempest hub radio link rejected as a transport (ARCHITECTURE ADR-001).
 
 **Notes:**
 12. **The RAK WisBlock option in the BOM** is kept as a prototype path only. It would need an nRF52 port of the custom firmware (unverified) and is not planned here; the Heltec V3 + SCL3300 build is primary.
-13. **Schedule risk.** Parts have not been ordered and today is 2026-10-10. If the install slips past about December 1, the winter test loses its worst-case weeks; E11.1 and E11.2 should note the actual install date in the report.
+13. **Schedule risk.** As of 2026-10-10 no parts were ordered; check the current status. Today is 2026-11-04, so about four weeks remain to the end-of-November install target, and the gateway firmware (E4.1) is new work. If the install slips past about December 1, the winter test loses its worst-case weeks; E11.1 and E11.2 should note the actual install date in the report.
